@@ -1,0 +1,7 @@
+target/
+test/*.iso
+
+# editor / OS junk
+*.swp
+*~
+.DS_Store

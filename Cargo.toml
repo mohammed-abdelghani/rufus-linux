@@ -1,0 +1,32 @@
+[package]
+name = "rufus-linux"
+version = "0.1.0"
+edition = "2021"
+description = "Linux rewrite of Rufus - create bootable USB drives"
+license = "GPL-3.0-only"
+repository = "https://github.com/mohammed-abdelghani/rufus-linux"
+
+[dependencies]
+winit = { version = "0.30", default-features = false, features = ["x11", "rwh_06"] }
+softbuffer = { version = "0.4", default-features = false, features = ["x11"] }
+anyhow = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+nix = { version = "0.26", default-features = false, features = ["fs", "mount"] }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+crc32fast = "1"
+sha1 = "0.10"
+sha2 = "0.10"
+md-5 = "0.10"
+flate2 = "1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+ab_glyph = "0.2"
+# Text shaping + bidi for the multilingual UI (Arabic/Hebrew/Indic/Thai scripts
+# in the Rufus locale set); pure Rust, no C toolchain needed.
+rustybuzz = "0.20"
+unicode-bidi = "0.3"

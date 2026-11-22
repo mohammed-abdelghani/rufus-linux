@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install X11 development libraries
+        run: sudo apt-get update -qq && sudo apt-get install -qq -y libx11-dev libx11-xcb-dev
+
+      - name: Build
+        run: cargo build --locked --release
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy -- -D warnings
+
+      - name: Tests (no root needed)
+        run: cargo test

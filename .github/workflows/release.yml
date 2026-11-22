@@ -1,0 +1,277 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish assets for (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  MAINTAINER: "Mohamed Abdel-Ghani El-Sayed <353394032+mohammed-abdelghani@users.noreply.github.com>"
+  HOMEPAGE: "https://github.com/mohammed-abdelghani/rufus-linux"
+  GLIBC_FLOOR: "2.34"
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # x86_64 (amd64) — native build
+          - target: x86_64-unknown-linux-gnu
+            deb_arch: amd64
+            rpm_arch: x86_64
+            asset_arch: x86_64
+            lib_triplet: x86_64-linux-gnu
+            cross_pkg: gcc
+            cross_ld: gcc
+          # i686 (32-bit x86) — host gcc in 32-bit mode, i386 libs in a sysroot
+          - target: i686-unknown-linux-gnu
+            deb_arch: i386
+            rpm_arch: i686
+            asset_arch: i686
+            lib_triplet: i386-linux-gnu
+            cross_pkg: gcc-multilib
+            cross_ld: gcc
+            foreign_arch: i386
+            extra_apt_arch: i386
+          # aarch64 (arm64) — cross gcc, runtime libs in a sysroot from ports.ubuntu.com
+          - target: aarch64-unknown-linux-gnu
+            deb_arch: arm64
+            rpm_arch: aarch64
+            asset_arch: aarch64
+            lib_triplet: aarch64-linux-gnu
+            cross_pkg: gcc-aarch64-linux-gnu
+            cross_ld: aarch64-linux-gnu-gcc
+            foreign_arch: arm64
+          # armv7 (armhf) — cross gcc, runtime libs in a sysroot from ports.ubuntu.com
+          - target: armv7-unknown-linux-gnueabihf
+            deb_arch: armhf
+            rpm_arch: armv7hl
+            asset_arch: armv7
+            lib_triplet: arm-linux-gnueabihf
+            cross_pkg: gcc-arm-linux-gnueabihf
+            cross_ld: arm-linux-gnueabihf-gcc
+            foreign_arch: armhf
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install toolchain and libraries
+        run: |
+          set -euxo pipefail
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu)
+              sudo apt-get update -qq
+              sudo apt-get install -qq -y libx11-dev libx11-xcb-dev ruby rpm
+              ;;
+            *)
+              # 1) cross toolchain from the base repos, BEFORE any foreign-arch
+              #    index exists — glibc pins co-installed architectures to the
+              #    exact same version, and the runner's libc is usually patched
+              #    beyond what archive/ports carry, so a foreign libc candidate
+              #    in the solver would force a downgrade of the runner's libc
+              #    (ruby + rpm are for fpm packaging later, also before the
+              #    foreign index exists for the same reason)
+              sudo apt-get update -qq
+              sudo apt-get install -qq -y "${{ matrix.cross_pkg }}" ruby rpm
+
+              # 2) fetch foreign-arch indexes, then download (never install)
+              #    the X11 stack into a link-time sysroot
+              extra="${{ matrix.extra_apt_arch || '' }}"
+              if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+                if grep -q '^Architectures:' /etc/apt/sources.list.d/ubuntu.sources; then
+                  sudo sed -i "s/^Architectures:.*/Architectures: amd64 $extra/" /etc/apt/sources.list.d/ubuntu.sources
+                else
+                  sudo sed -i "s/^Types: deb$/Types: deb\nArchitectures: amd64 $extra/" /etc/apt/sources.list.d/ubuntu.sources
+                fi
+              elif [ -f /etc/apt/sources.list ]; then
+                sudo sed -i "s/^deb /deb [arch=amd64 $extra] /" /etc/apt/sources.list
+              fi
+
+              if [ "${{ matrix.foreign_arch }}" != "i386" ]; then
+                # arm64 / armhf package indexes live on ports.ubuntu.com
+                codename="$(. /etc/os-release && echo "$UBUNTU_CODENAME")"
+                echo "deb [arch=${{ matrix.foreign_arch }}] http://ports.ubuntu.com/ubuntu-ports ${codename} main universe" \
+                  | sudo tee /etc/apt/sources.list.d/ports.list
+              fi
+
+              sudo dpkg --add-architecture "${{ matrix.foreign_arch }}"
+              sudo apt-get update -qq
+
+              SYSROOT="${{ github.workspace }}/sysroot-${{ matrix.asset_arch }}"
+              mkdir -p "$SYSROOT"
+              cd "$SYSROOT"
+              for p in libx11-dev libx11-6 libx11-xcb-dev libx11-xcb1 \
+                       libxcb1-dev libxcb1 libxau-dev libxau6 \
+                       libxdmcp-dev libxdmcp6; do
+                apt-get download "${p}:${{ matrix.foreign_arch }}"
+              done
+              # arch-independent proto packages x11.pc pulls in
+              apt-get download x11proto-dev libpthread-stubs0-dev
+              for d in ./*.deb; do dpkg -x "$d" "$SYSROOT"; done
+              ls "$SYSROOT/usr/include/X11" "$SYSROOT/usr/lib/${{ matrix.lib_triplet }}"
+              ;;
+          esac
+
+      - name: Build
+        run: |
+          # The linker/rustflags env vars are exported per-target here instead
+          # of a step-level env block: cargo applies CARGO_TARGET_X86_64_* to
+          # the HOST toolchain used for build scripts, so a cross linker set
+          # unconditionally would break every host-side build script.
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu)
+              export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=gcc
+              ;;
+            i686-unknown-linux-gnu)
+              SYSROOT="${{ github.workspace }}/sysroot-i686"
+              LIBDIR="$SYSROOT/usr/lib/${{ matrix.lib_triplet }}"
+              export CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER=gcc
+              export CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-m32 -C link-arg=-Wl,-rpath-link,$LIBDIR -L $LIBDIR"
+              ;;
+            aarch64-unknown-linux-gnu)
+              SYSROOT="${{ github.workspace }}/sysroot-aarch64"
+              LIBDIR="$SYSROOT/usr/lib/${{ matrix.lib_triplet }}"
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=${{ matrix.cross_ld }}
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-Wl,-rpath-link,$LIBDIR -L $LIBDIR"
+              ;;
+            armv7-unknown-linux-gnueabihf)
+              SYSROOT="${{ github.workspace }}/sysroot-armv7"
+              LIBDIR="$SYSROOT/usr/lib/${{ matrix.lib_triplet }}"
+              export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=${{ matrix.cross_ld }}
+              export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS="-C link-arg=-Wl,-rpath-link,$LIBDIR -L $LIBDIR"
+              ;;
+          esac
+
+          # only the cross targets use the downloaded-libs sysroot; the native
+          # build must keep the system pkg-config search paths
+          if [ "${{ matrix.target }}" != "x86_64-unknown-linux-gnu" ]; then
+            export PKG_CONFIG_ALLOW_CROSS=1
+            SYSROOT="${{ github.workspace }}/sysroot-${{ matrix.asset_arch }}"
+            export PKG_CONFIG_SYSROOT_DIR="$SYSROOT"
+            export PKG_CONFIG_LIBDIR="$SYSROOT/usr/lib/${{ matrix.lib_triplet }}/pkgconfig:$SYSROOT/usr/share/pkgconfig"
+          fi
+          cargo build --locked --release --target ${{ matrix.target }}
+
+          BIN="target/${{ matrix.target }}/release/rufus-linux"
+          # The runner's crt and X11 objects carry x86-64-v3 ISA notes that
+          # propagate into the binary; our own code is baseline (rustc default
+          # codegen), so dropping the note keeps the binary runnable on
+          # pre-v3 CPUs. 32-bit x86 has no ISA notes; the removal is a no-op.
+          objcopy --remove-section .note.gnu.property "$BIN" 2>/dev/null || true
+
+      - name: Package tarball, deb and rpm
+        env:
+          ASSET_ARCH: ${{ matrix.asset_arch }}
+          DEB_ARCH: ${{ matrix.deb_arch }}
+          RPM_ARCH: ${{ matrix.rpm_arch }}
+        run: |
+          set -euxo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          BIN="target/${{ matrix.target }}/release/rufus-linux"
+
+          # generic tarball
+          mkdir -p "dist/tar/rufus-linux-${TAG}-${ASSET_ARCH}"
+          cp "$BIN" "dist/tar/rufus-linux-${TAG}-${ASSET_ARCH}/rufus-linux"
+          cp LICENSE README.md "dist/tar/rufus-linux-${TAG}-${ASSET_ARCH}/"
+          tar -C dist/tar -czf "dist/rufus-linux-${TAG}-${ASSET_ARCH}.tar.gz" "rufus-linux-${TAG}-${ASSET_ARCH}"
+
+          # staging tree for deb/rpm
+          mkdir -p dist/stage/usr/bin dist/stage/usr/share/licenses/rufus-linux dist/stage/usr/share/doc/rufus-linux
+          cp "$BIN" dist/stage/usr/bin/rufus-linux
+          cp LICENSE dist/stage/usr/share/licenses/rufus-linux/LICENSE
+          cp LICENSE dist/stage/usr/share/doc/rufus-linux/copyright
+
+          # desktop integration: menu launcher, icon and AppStream metadata
+          mkdir -p dist/stage/usr/share/applications \
+                   dist/stage/usr/share/icons/hicolor/64x64/apps \
+                   dist/stage/usr/share/metainfo
+          cp packaging/io.github.mohammed-abdelghani.rufus-linux.desktop dist/stage/usr/share/applications/
+          cp packaging/rufus-linux.png dist/stage/usr/share/icons/hicolor/64x64/apps/rufus-linux.png
+          cp packaging/io.github.mohammed-abdelghani.rufus-linux.metainfo.xml dist/stage/usr/share/metainfo/
+
+          # fpm builds both deb and rpm from the same staging tree
+          # (ruby and rpm were installed in the toolchain step)
+          sudo gem install fpm --no-document
+
+          fpm -s dir -t deb \
+            -n rufus-linux -v "$VERSION" --iteration 5 \
+            -a "$DEB_ARCH" \
+            --license "GPL-3.0-only" \
+            --maintainer "$MAINTAINER" \
+            --url "$HOMEPAGE" \
+            --description "Rufus-compatible bootable USB creator for Linux" \
+            --depends "libc6 (>= ${GLIBC_FLOOR})" \
+            --depends libx11-6 \
+            --depends libx11-xcb1 \
+            --depends libxcb1 \
+            --deb-recommends wimtools \
+            --deb-recommends ntfs-3g \
+            --deb-recommends exfatprogs \
+            --deb-recommends curl \
+            --deb-suggests zenity \
+            -C dist/stage usr
+
+          fpm -s dir -t rpm \
+            -n rufus-linux -v "$VERSION" --iteration 5 \
+            -a "$RPM_ARCH" --rpm-os linux \
+            --license "GPLv3+" \
+            --maintainer "$MAINTAINER" \
+            --url "$HOMEPAGE" \
+            --description "Rufus-compatible bootable USB creator for Linux" \
+            --depends "glibc >= ${GLIBC_FLOOR}" \
+            --depends libX11 \
+            --depends libxcb \
+            -C dist/stage usr
+
+          # fpm writes to the current directory; collect everything into dist/
+          mv -f ./*.deb ./*.rpm dist/
+
+          # integrity: everything must land under /usr, never doubled or
+          # prefixed with the staging path (guard against fpm mapping quirks)
+          dpkg-deb -c dist/*.deb > /tmp/deb-files.txt 2>/dev/null
+          rpm -qlp dist/*.rpm > /tmp/rpm-files.txt 2>/dev/null
+          grep -q './usr/bin/rufus-linux' /tmp/deb-files.txt
+          ! grep -qE 'dist/stage|bin/bin|share/share' /tmp/deb-files.txt
+          grep -q '^/usr/bin/rufus-linux' /tmp/rpm-files.txt
+          ! grep -qE 'dist/stage|bin/bin|share/share' /tmp/rpm-files.txt
+          ls -la dist/
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.inputs.tag || github.ref_name }}" \
+            dist/rufus-linux-*.tar.gz dist/*_*.deb dist/*.rpm \
+            --repo "${{ github.repository }}" --clobber
+
+  checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and upload SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release download "$TAG" --repo "${{ github.repository }}" --dir dl --clobber
+          cd dl
+          sha256sum $(ls | grep -v '^SHA256SUMS.txt$') > SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --repo "${{ github.repository }}" --clobber

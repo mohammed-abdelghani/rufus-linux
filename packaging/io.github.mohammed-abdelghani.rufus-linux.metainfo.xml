@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.mohammed-abdelghani.rufus-linux</id>
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>rufus-linux</name>
+  <summary>Create bootable USB drives the Rufus way — natively on Linux</summary>
+  <description>
+    <p>
+      rufus-linux is a from-scratch Rust rewrite of Rufus with a self-contained
+      Win32-style GUI: pick a device, pick an ISO and press START.
+    </p>
+    <ul>
+      <li>Disk or ISO image, raw/DD, non-bootable, FreeDOS and Windows To Go write modes</li>
+      <li>MBR and GPT partitioning, UEFI:NTFS, old-BIOS fixes, bad-blocks check</li>
+      <li>Official Windows and Linux ISO downloads with SHA-256 verification</li>
+      <li>38-language interface with OpenType shaping and bidi reordering</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.mohammed-abdelghani.rufus-linux.desktop</launchable>
+  <developer_name>Mohamed Abdel-Ghani El-Sayed</developer_name>
+  <url type="homepage">https://github.com/mohammed-abdelghani/rufus-linux</url>
+  <url type="bugtracker">https://github.com/mohammed-abdelghani/rufus-linux/issues</url>
+  <categories>
+    <category>System</category>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <provides>
+    <binary>rufus-linux</binary>
+    <mediatype>application/x-iso9660-image</mediatype>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-11-22">
+      <url type="details">https://github.com/mohammed-abdelghani/rufus-linux/releases/tag/v0.1.0</url>
+      <description>
+        <p>Initial public release.</p>
+        <ul>
+          <li>Five write modes incl. Windows To Go with Rufus-exact boot layouts</li>
+          <li>In-app official ISO downloads (Windows 11/10 + 8 Linux distros)</li>
+          <li>38-language UI, bad-blocks check, persistence, image hashes</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>
