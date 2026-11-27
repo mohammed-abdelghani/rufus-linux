@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Community and maintenance files: `CONTRIBUTING.md`, `SECURITY.md`, GitHub
   issue templates, pull request template, Dependabot configuration, and
   `ASSETS.md` documenting bundled third-party assets.
+- CI: cargo build cache (`Swatinem/rust-cache`), a non-blocking `cargo audit`
+  job, and a `cargo deny` license check with an allow-list of the licenses
+  present in the tree.
+
+### Changed
+
+- Release binaries are stripped and built with thin LTO
+  (`[profile.release]` `strip = true`, `lto = "thin"`), shrinking the binary
+  by about 25%.
+- The tree is rustfmt-formatted and `cargo fmt --check` is enforced in CI;
+  the formatting commit is excluded from `git blame`.
+
+None of the above changes runtime behavior; only packaging size, source
+formatting, developer docs and CI are affected.
 
 ## [0.1.0] - 2026-11-22
 
