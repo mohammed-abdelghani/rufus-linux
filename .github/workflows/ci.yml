@@ -25,6 +25,9 @@ jobs:
       - name: Install X11 development libraries
         run: sudo apt-get update -qq && sudo apt-get install -qq -y libx11-dev libx11-xcb-dev
 
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
       - name: Check formatting
         run: cargo fmt --check
 
