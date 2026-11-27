@@ -1,0 +1,5 @@
+# Formatting-only commits that are ignored by `git blame --ignore-rev-file`.
+# See: https://git-scm.com/docs/git-config/#Documentation/git-config.txt-blameignoreRevsFile
+
+# style: apply rustfmt to the tree
+04e154d203f76aa7551a7a787b938ef9453921b4
