@@ -60,7 +60,11 @@ impl Disk {
         // BLKSSZGET = 0x1268
         let mut sz: libc::c_int = 0;
         let r = unsafe { libc::ioctl(file.as_raw_fd(), 0x1268, &mut sz) };
-        if r == 0 && sz > 0 { Some(sz as u64) } else { None }
+        if r == 0 && sz > 0 {
+            Some(sz as u64)
+        } else {
+            None
+        }
     }
 
     pub fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<()> {
@@ -103,7 +107,13 @@ impl Disk {
 
     /// Get CHS geometry (may fail on modern devices; returns defaults).
     pub fn geometry(&self) -> (u16, u8, u8) {
-        let mut g = HdGeometry { heads: 0, sectors: 0, cylinders: 0, start: 0, size: 0 };
+        let mut g = HdGeometry {
+            heads: 0,
+            sectors: 0,
+            cylinders: 0,
+            start: 0,
+            size: 0,
+        };
         let r = unsafe { libc::ioctl(self.file.as_raw_fd(), HDIO_GETGEO as libc::Ioctl, &mut g) };
         if r == 0 && g.heads > 0 {
             (g.cylinders, g.heads, g.sectors)
@@ -175,7 +185,12 @@ mod tests {
     fn inspect_table_mbr_gpt_empty() {
         // MBR image
         let mbr = build_mbr(
-            &[Partition { bootable: true, fs: FsType::Fat32Lba, start_lba: 2048, sectors: 1000 }],
+            &[Partition {
+                bootable: true,
+                fs: FsType::Fat32Lba,
+                start_lba: 2048,
+                sectors: 1000,
+            }],
             None,
             7,
             255,

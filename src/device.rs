@@ -45,7 +45,9 @@ pub fn human_size(bytes: u64) -> String {
 }
 
 fn read_trim(p: &Path) -> String {
-    fs::read_to_string(p).map(|s| s.trim().to_string()).unwrap_or_default()
+    fs::read_to_string(p)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
 }
 
 /// Node path of partition `n` of whole disk `dev` — NVMe/MMC disks name
@@ -88,7 +90,9 @@ fn is_dev_or_partition_of(src: &str, dev: &str) -> bool {
     if src == dev {
         return true;
     }
-    let Some(rest) = src.strip_prefix(dev) else { return false };
+    let Some(rest) = src.strip_prefix(dev) else {
+        return false;
+    };
     if rest.is_empty() {
         return false;
     }
@@ -112,12 +116,18 @@ pub enum DevFilter {
 /// Enumerate candidate whole-disk devices under /sys/block.
 pub fn list_devices(filter: DevFilter) -> Vec<Device> {
     let mut out = Vec::new();
-    let Ok(entries) = fs::read_dir("/sys/block") else { return out };
+    let Ok(entries) = fs::read_dir("/sys/block") else {
+        return out;
+    };
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         // virtual / non-writable devices
-        if name.starts_with("loop") || name.starts_with("ram") || name.starts_with("zram")
-            || name.starts_with("dm-") || name.starts_with("md") || name.starts_with("sr")
+        if name.starts_with("loop")
+            || name.starts_with("ram")
+            || name.starts_with("zram")
+            || name.starts_with("dm-")
+            || name.starts_with("md")
+            || name.starts_with("sr")
         {
             continue;
         }
@@ -182,12 +192,19 @@ pub fn list_devices(filter: DevFilter) -> Vec<Device> {
 /// usb interface (1-2:1.0) -> usb device (1-2) -> usb bus (usb1) for sticks;
 /// ata/nvme/mmc/virtio layers for internal disks.
 fn detect_bus(devdir: &Path) -> (bool, String) {
-    let Ok(mut cur) = devdir.canonicalize() else { return (false, String::new()) };
+    let Ok(mut cur) = devdir.canonicalize() else {
+        return (false, String::new());
+    };
     const GENERIC: [&str; 3] = ["scsi", "scsi_device", "scsi_host"];
     let mut generic = String::new();
     for _ in 0..8 {
         if let Ok(link) = fs::read_link(cur.join("subsystem")) {
-            let name = link.to_string_lossy().rsplit('/').next().unwrap_or("").to_string();
+            let name = link
+                .to_string_lossy()
+                .rsplit('/')
+                .next()
+                .unwrap_or("")
+                .to_string();
             match name.as_str() {
                 "usb" => return (true, "usb".to_string()),
                 "ata" | "nvme" | "mmc" | "virtio" => return (false, name),
@@ -239,15 +256,20 @@ mod tests {
         // fake sysfs tree shaped like a real USB stick:
         // 6:0:0:0 -> target -> host -> usb interface -> usb device -> usb bus
         let base = std::env::temp_dir().join(format!("rufus-bustest-{}", std::process::id()));
-        let dev_dir = base
-            .join("devices/pci0/usb1/1-2/1-2:1.0/host6/target6:0:0/6:0:0:0");
+        let dev_dir = base.join("devices/pci0/usb1/1-2/1-2:1.0/host6/target6:0:0/6:0:0:0");
         let class = base.join("class");
         let _ = std::fs::create_dir_all(&dev_dir);
         let _ = std::fs::create_dir_all(class.join("usb"));
         let _ = std::fs::create_dir_all(class.join("scsi_device"));
         // subsystem symlinks (real sysfs uses relative ../../class/X links)
         std::os::unix::fs::symlink("../../class/scsi_device", dev_dir.join("subsystem")).unwrap();
-        let iface = dev_dir.parent().unwrap().parent().unwrap().parent().unwrap();
+        let iface = dev_dir
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
         std::os::unix::fs::symlink("../../class/usb", iface.join("subsystem")).unwrap();
 
         let (usb, bus) = detect_bus(&dev_dir);
@@ -284,8 +306,14 @@ mod tests {
 /dev/sdb1 /media/usb vfat rw 0 0
 tmpfs /tmp tmpfs rw 0 0
 ";
-        assert_eq!(system_root_mount_in(mounts, "/dev/sda").as_deref(), Some("/"));
-        assert_eq!(system_root_mount_in(mounts, "/dev/sda1").as_deref(), Some("/boot/efi"));
+        assert_eq!(
+            system_root_mount_in(mounts, "/dev/sda").as_deref(),
+            Some("/")
+        );
+        assert_eq!(
+            system_root_mount_in(mounts, "/dev/sda1").as_deref(),
+            Some("/boot/efi")
+        );
         // USB stick with no root/boot mount -> None
         assert_eq!(system_root_mount_in(mounts, "/dev/sdb"), None);
         // look-alike /dev/sdaX device must not be treated as system disk

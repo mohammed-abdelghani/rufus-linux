@@ -11,8 +11,8 @@
 //! (SHA-256 verify, STOP, inline log) live in the advanced format options
 //! with the same look.
 
-use anyhow::Result;
 use ab_glyph::{Font as _, ScaleFont as _};
+use anyhow::Result;
 use md5::Md5;
 use sha1::Sha1;
 use sha2::{Digest as _, Sha256, Sha512};
@@ -29,7 +29,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 use crate::device::{self, Device};
-use crate::engine::{self, Engine, Options, Progress, PartitionScheme};
+use crate::engine::{self, Engine, Options, PartitionScheme, Progress};
 use crate::iso9660;
 
 // Rufus "⬇ DOWNLOAD" dialog (official Windows/Linux ISO downloads)
@@ -155,16 +155,14 @@ fn summarize_iso(iso: &iso9660::IsoImage) -> IsoSummary {
         .any(|e| e.path.to_lowercase().contains("install.wim") && e.size > WIM_LIMIT);
     // Rufus iso.c root scan: a bare "bootmgr"/"bootmgr.efi marks a Windows
     // boot manager; WinPE 1.x keeps its loader in /i386, /amd64 or /minint
-    let root_file = |name: &str| {
-        files
-            .iter()
-            .any(|e| e.path.eq_ignore_ascii_case(name))
-    };
+    let root_file = |name: &str| files.iter().any(|e| e.path.eq_ignore_ascii_case(name));
     let pe_file = |name: &str| {
         files.iter().any(|e| {
             let p = e.path.to_lowercase();
             (p.starts_with("i386/") || p.starts_with("amd64/") || p.starts_with("minint/"))
-                && p.rsplit('/').next().is_some_and(|b| b.eq_ignore_ascii_case(name))
+                && p.rsplit('/')
+                    .next()
+                    .is_some_and(|b| b.eq_ignore_ascii_case(name))
         })
     };
     IsoSummary {
@@ -195,7 +193,11 @@ impl FileBrowser {
         let dir = std::env::var("HOME")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| std::path::PathBuf::from("/"));
-        let mut b = FileBrowser { dir, entries: Vec::new(), top: 0 };
+        let mut b = FileBrowser {
+            dir,
+            entries: Vec::new(),
+            top: 0,
+        };
         b.reload();
         b
     }
@@ -282,10 +284,14 @@ struct Fonts {
 /// System font locations for the primary UI font (DejaVu covers Latin, Greek,
 /// Cyrillic, Hebrew, Arabic).
 const PRIMARY_FONTS: [(&str, &str); 2] = [
-    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-    ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ),
+    (
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ),
 ];
 
 /// Directories scanned for per-script fallback fonts (Debian/Ubuntu Noto
@@ -300,13 +306,20 @@ const FALLBACK_DIRS: [&str; 4] = [
 fn load_font_entry(path: &str) -> Option<FontEntry> {
     let bytes = std::fs::read(path).ok()?;
     let font = ab_glyph::FontArc::try_from_vec(bytes.clone()).ok()?;
-    Some(FontEntry { font, bytes: Arc::new(bytes) })
+    Some(FontEntry {
+        font,
+        bytes: Arc::new(bytes),
+    })
 }
 
 fn load_fonts() -> Option<Fonts> {
     for (r, b) in PRIMARY_FONTS {
         if let (Some(fr), Some(fb)) = (load_font_entry(r), load_font_entry(b)) {
-            return Some(Fonts { regular: fr, bold: fb, fallbacks: load_fallbacks() });
+            return Some(Fonts {
+                regular: fr,
+                bold: fb,
+                fallbacks: load_fallbacks(),
+            });
         }
     }
     None
@@ -317,12 +330,16 @@ fn load_fonts() -> Option<Fonts> {
 fn load_fallbacks() -> Vec<FontEntry> {
     let mut out: Vec<FontEntry> = Vec::new();
     for dir in FALLBACK_DIRS {
-        let Ok(rd) = std::fs::read_dir(dir) else { continue };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            continue;
+        };
         let mut paths: Vec<std::path::PathBuf> = rd
             .flatten()
             .map(|e| e.path())
             .filter(|p| {
-                let Some(name) = p.file_name().and_then(|n| n.to_str()) else { return false };
+                let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+                    return false;
+                };
                 let lower = name.to_lowercase();
                 (lower.ends_with(".ttf") || lower.ends_with(".otf") || lower.ends_with(".ttc"))
                     && !lower.contains("italic")
@@ -393,7 +410,8 @@ enum HashState {
 fn compute_image_hashes(path: &std::path::Path) -> Result<HashInfo> {
     use std::io::Read as _;
     let mut f = std::fs::File::open(path)?;
-    let (mut m5, mut s1, mut s256, mut s512) = (Md5::new(), Sha1::new(), Sha256::new(), Sha512::new());
+    let (mut m5, mut s1, mut s256, mut s512) =
+        (Md5::new(), Sha1::new(), Sha256::new(), Sha512::new());
     let mut buf = vec![0u8; 1 << 20];
     loop {
         let n = f.read(&mut buf)?;
@@ -769,7 +787,10 @@ impl App {
                 log: if saved.persistent_log {
                     // Rufus parity: a persistent log starts with a ctime-style
                     // session-start timestamp line
-                    vec![crate::config::ctime_now(), crate::locale::tr(locale, "READY").to_string()]
+                    vec![
+                        crate::config::ctime_now(),
+                        crate::locale::tr(locale, "READY").to_string(),
+                    ]
                 } else {
                     vec![crate::locale::tr(locale, "READY").to_string()]
                 },
@@ -790,7 +811,11 @@ impl App {
                 focus_label: false,
                 cancel_token: None,
                 iso_cache: None,
-                iso_dirty_at: if has_image { Some(Instant::now()) } else { None },
+                iso_dirty_at: if has_image {
+                    Some(Instant::now())
+                } else {
+                    None
+                },
                 last_dev_refresh: Instant::now(),
                 start_time: Instant::now(),
                 desired_h: 560,
@@ -848,12 +873,23 @@ impl App {
             quick: self.ui.quick,
             badblocks: self.ui.badblocks,
             badblocks_sel: self.ui.bb_sel as u8,
-            persist_gb: self.ui.persist_gb_str.trim().parse::<u64>().unwrap_or(0).min(64),
+            persist_gb: self
+                .ui
+                .persist_gb_str
+                .trim()
+                .parse::<u64>()
+                .unwrap_or(0)
+                .min(64),
             list_usb_hdd: self.ui.list_usb_hdd,
             old_bios_fixes: self.ui.old_bios_fixes,
             advanced_open: self.ui.advanced_open,
             recent_images: self.ui.recent.clone(),
-            last_device: self.ui.devices.get(self.ui.sel_dev).map(|d| d.path.clone()).unwrap_or_default(),
+            last_device: self
+                .ui
+                .devices
+                .get(self.ui.sel_dev)
+                .map(|d| d.path.clone())
+                .unwrap_or_default(),
             extra_hashes: self.ui.extra_hashes,
             use_rufus_mbr: self.ui.use_rufus_mbr,
             large_fat32: self.ui.large_fat32,
@@ -927,7 +963,11 @@ impl App {
             .filter(|&i| i != 1 || fat32_allowed(dev_size, self.ui.large_fat32))
             .map(|i| {
                 let name = if i == 1 && large {
-                    format!("{} {}", crate::locale::tr(self.ui.locale, "Large"), Self::fs_display(self.ui.locale, i))
+                    format!(
+                        "{} {}",
+                        crate::locale::tr(self.ui.locale, "Large"),
+                        Self::fs_display(self.ui.locale, i)
+                    )
                 } else {
                     Self::fs_display(self.ui.locale, i)
                 };
@@ -955,7 +995,11 @@ impl App {
                 if i == 0 {
                     crate::locale::trf(l, "%s (Default)", &[&format!("0x{id:02X}")])
                 } else {
-                    crate::locale::trf(l, "0x{0} (Disk {1})", &[&format!("{id:02X}"), &(i + 1).to_string()])
+                    crate::locale::trf(
+                        l,
+                        "0x{0} (Disk {1})",
+                        &[&format!("{id:02X}"), &(i + 1).to_string()],
+                    )
                 }
             })
             .collect()
@@ -963,7 +1007,11 @@ impl App {
 
     /// Cluster-size combo text with the translated "(Default)" suffix.
     fn cluster_display(l: usize, bytes: usize) -> String {
-        crate::locale::trf(l, "%s (Default)", &[&format!("{} {}", bytes, crate::locale::tr(l, "bytes"))])
+        crate::locale::trf(
+            l,
+            "%s (Default)",
+            &[&format!("{} {}", bytes, crate::locale::tr(l, "bytes"))],
+        )
     }
 
     /// When FAT32 is hidden for the selected device, fall back to NTFS and say
@@ -1027,19 +1075,24 @@ impl App {
         // Rufus uuprintf parity: with USB enumeration debug (Alt-.) on, every
         // scan lists the verbose details of the devices it processed
         if self.ui.usb_debug {
-            let trace: Vec<String> = self.ui.devices.iter().map(|d| {
-                format!(
-                    "trace: {} \"{} {}\" {} tran={} bus={} removable={} serial={}",
-                    d.path,
-                    d.vendor,
-                    d.model,
-                    d.size_human(),
-                    d.tran,
-                    d.bus,
-                    if d.removable { "yes" } else { "no" },
-                    d.serial
-                )
-            }).collect();
+            let trace: Vec<String> = self
+                .ui
+                .devices
+                .iter()
+                .map(|d| {
+                    format!(
+                        "trace: {} \"{} {}\" {} tran={} bus={} removable={} serial={}",
+                        d.path,
+                        d.vendor,
+                        d.model,
+                        d.size_human(),
+                        d.tran,
+                        d.bus,
+                        if d.removable { "yes" } else { "no" },
+                        d.serial
+                    )
+                })
+                .collect();
             for t in trace {
                 self.push_log(t);
             }
@@ -1082,9 +1135,8 @@ impl App {
     /// applies to MBR + BIOS-target bootable writes; for images it needs a
     /// BIOS-bootable, non-DD Windows image.
     fn mbr_row_enabled(&self) -> bool {
-        let mut enabled = !self.ui.gpt
-            && !self.ui.efi_only
-            && self.ui.boot_mode != BootMode::NonBootable;
+        let mut enabled =
+            !self.ui.gpt && !self.ui.efi_only && self.ui.boot_mode != BootMode::NonBootable;
         if self.ui.boot_mode == BootMode::DiskImage {
             match self.ui.iso_cache.as_ref().and_then(|(_, s)| s.clone()) {
                 None => enabled = false, // raw/DD image: no volume boot code
@@ -1102,8 +1154,7 @@ impl App {
     /// (there is no volume to hold autorun.inf). The supported main
     /// filesystems (FAT32/NTFS/exFAT) always allow it.
     fn extended_label_enabled(&self) -> bool {
-        !matches!(self.ui.iso_cache, Some((_, None)))
-            || self.ui.boot_mode != BootMode::DiskImage
+        !matches!(self.ui.iso_cache, Some((_, None))) || self.ui.boot_mode != BootMode::DiskImage
     }
 
     /// Rufus SetMBRProps: auto-manage the "Use Rufus MBR with BIOS ID"
@@ -1303,14 +1354,20 @@ impl App {
             }
         }
         // selections that change the "Use Rufus MBR with BIOS ID" applicability
-        if matches!(dd, DD::Boot | DD::ImageOption | DD::Scheme | DD::Target | DD::Fs) {
+        if matches!(
+            dd,
+            DD::Boot | DD::ImageOption | DD::Scheme | DD::Target | DD::Fs
+        ) {
             self.update_mbr_props();
         }
     }
 
     fn dd_items(&self, dd: DD) -> Vec<String> {
         match dd {
-            DD::Lang => crate::locale::LANGS.iter().map(|l| l.name.to_string()).collect(),
+            DD::Lang => crate::locale::LANGS
+                .iter()
+                .map(|l| l.name.to_string())
+                .collect(),
             DD::Device => self
                 .ui
                 .devices
@@ -1353,11 +1410,15 @@ impl App {
                     .unwrap_or(false);
                 if has_wininst {
                     vec![
-                        crate::locale::tr(self.ui.locale, "Standard Windows installation").to_string(),
+                        crate::locale::tr(self.ui.locale, "Standard Windows installation")
+                            .to_string(),
                         crate::locale::tr(self.ui.locale, "Windows To Go").to_string(),
                     ]
                 } else {
-                    vec![crate::locale::tr(self.ui.locale, "Standard Windows installation").to_string()]
+                    vec![
+                        crate::locale::tr(self.ui.locale, "Standard Windows installation")
+                            .to_string(),
+                    ]
                 }
             }
             DD::Scheme => SCHEME_NAMES
@@ -1396,8 +1457,20 @@ impl App {
                 .map(|i| i + 1) // item 0 is the DOWNLOAD action
                 .unwrap_or(usize::MAX),
             DD::ImageOption => self.ui.image_option.min(1),
-            DD::Scheme => if self.ui.gpt { 1 } else { 0 },
-            DD::Target => if self.ui.efi_only { 1 } else { 0 },
+            DD::Scheme => {
+                if self.ui.gpt {
+                    1
+                } else {
+                    0
+                }
+            }
+            DD::Target => {
+                if self.ui.efi_only {
+                    1
+                } else {
+                    0
+                }
+            }
             DD::Fs => self
                 .fs_entries()
                 .iter()
@@ -1424,7 +1497,8 @@ impl App {
             return;
         }
         if self.ui.boot_mode == BootMode::DiskImage && self.ui.image_path.is_empty() {
-            self.ui.status = crate::locale::tr(l, "Please select an image with SELECT first.").to_string();
+            self.ui.status =
+                crate::locale::tr(l, "Please select an image with SELECT first.").to_string();
             self.ui.status_is_error = true;
             return;
         }
@@ -1503,7 +1577,13 @@ impl App {
         } else {
             std::path::PathBuf::new()
         };
-        let persist_gb = self.ui.persist_gb_str.trim().parse::<u64>().unwrap_or(0).min(64);
+        let persist_gb = self
+            .ui
+            .persist_gb_str
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(0)
+            .min(64);
         let opts = Options {
             fs: if write_mode == engine::WriteMode::FreeDos {
                 engine::FsKind::Fat32 // DOS requires FAT
@@ -1516,7 +1596,11 @@ impl App {
                     _ => engine::FsKind::Fat32,
                 }
             },
-            scheme: if self.ui.gpt { PartitionScheme::Gpt } else { PartitionScheme::Mbr },
+            scheme: if self.ui.gpt {
+                PartitionScheme::Gpt
+            } else {
+                PartitionScheme::Mbr
+            },
             fs_label: self.ui.label.clone(),
             quick: self.ui.quick,
             verify: self.ui.verify,
@@ -1638,8 +1722,14 @@ impl App {
                         "--file-filter=All files | *.*",
                     ],
                 ),
-                ("kdialog", vec!["--getsavefilename", &home, "Rufus log|*.log\nAll files|*.*"]),
-                ("yad", vec!["--file", "--save", "--title=Save log file", &yad_name]),
+                (
+                    "kdialog",
+                    vec!["--getsavefilename", &home, "Rufus log|*.log\nAll files|*.*"],
+                ),
+                (
+                    "yad",
+                    vec!["--file", "--save", "--title=Save log file", &yad_name],
+                ),
             ];
             let Some(path) = candidates.iter().find_map(|(prog, args)| {
                 let out = std::process::Command::new(prog).args(args).output().ok()?;
@@ -1647,11 +1737,17 @@ impl App {
                     return None;
                 }
                 let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if text.is_empty() { None } else { Some(text) }
+                if text.is_empty() {
+                    None
+                } else {
+                    Some(text)
+                }
             }) else {
-                let _ = tx.send(Err(
-                    crate::locale::tr(l, "no system file picker found — log not saved").to_string(),
-                ));
+                let _ = tx.send(Err(crate::locale::tr(
+                    l,
+                    "no system file picker found — log not saved",
+                )
+                .to_string()));
                 return;
             };
             match crate::config::write_log_at(std::path::Path::new(&path), &lines, false) {
@@ -1699,7 +1795,11 @@ impl ApplicationHandler for App {
                     self.ui.persist_gb_str = gb.to_string();
                 }
             }
-            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => {
                 self.ui_dirty = true;
                 match state {
                     ElementState::Pressed => {
@@ -1771,14 +1871,17 @@ impl ApplicationHandler for App {
                     // "Persistent log" hidden setting; Ctrl+L toggles the log
                     // (all Rufus parity)
                     if self.modifiers.state().control_key() {
-                        if matches!(&ke.logical_key, Key::Character(s) if s.as_str().eq_ignore_ascii_case("v")) {
+                        if matches!(&ke.logical_key, Key::Character(s) if s.as_str().eq_ignore_ascii_case("v"))
+                        {
                             self.paste_clipboard();
                         }
-                        if matches!(&ke.logical_key, Key::Character(s) if s.as_str().eq_ignore_ascii_case("p")) {
+                        if matches!(&ke.logical_key, Key::Character(s) if s.as_str().eq_ignore_ascii_case("p"))
+                        {
                             self.ui.persistent_log = !self.ui.persistent_log;
                             self.status_timeout("Persistent log", self.ui.persistent_log);
                         }
-                        if matches!(&ke.logical_key, Key::Character(s) if s.as_str().eq_ignore_ascii_case("l")) {
+                        if matches!(&ke.logical_key, Key::Character(s) if s.as_str().eq_ignore_ascii_case("l"))
+                        {
                             self.ui.log_open = !self.ui.log_open;
                         }
                     }
@@ -1875,11 +1978,14 @@ impl App {
         }
         for msg in msgs {
             match msg {
-                    WorkerMsg::Progress(p) => {
-                        let total = p.total.max(1) as f64;
-                        self.ui.progress = Some((p.phase.clone(), p.done as f64 / total));
-                        self.push_log(format!("[{}] {} {}/{}", p.phase, p.message, p.done, p.total));
-                    }
+                WorkerMsg::Progress(p) => {
+                    let total = p.total.max(1) as f64;
+                    self.ui.progress = Some((p.phase.clone(), p.done as f64 / total));
+                    self.push_log(format!(
+                        "[{}] {} {}/{}",
+                        p.phase, p.message, p.done, p.total
+                    ));
+                }
                 WorkerMsg::Done(res) => {
                     self.ui.running = false;
                     self.ui.cancel_token = None;
@@ -1898,13 +2004,15 @@ impl App {
                         Err(e) => {
                             let msg = format!("{e:#}");
                             if msg.contains("cancelled") {
-                                self.ui.status = crate::locale::tr(l, "Operation cancelled by the user").to_string();
+                                self.ui.status =
+                                    crate::locale::tr(l, "Operation cancelled by the user")
+                                        .to_string();
                                 self.ui.status_is_error = false;
-                                self.ui.status_until = Some(Instant::now() + Duration::from_secs(3));
+                                self.ui.status_until =
+                                    Some(Instant::now() + Duration::from_secs(3));
                                 self.push_log("CANCELLED");
                             } else {
-                                self.ui.status =
-                                    crate::locale::trf(l, "Error: {0}", &[&msg]);
+                                self.ui.status = crate::locale::trf(l, "Error: {0}", &[&msg]);
                                 self.ui.status_is_error = true;
                                 self.push_log(format!("ERROR: {msg}"));
                             }
@@ -1929,7 +2037,7 @@ impl App {
         // Windows To Go edition list arrived → show Rufus's "Version
         // selection" dialog when the WIM carries more than one edition
         if self.ui.awaiting_wim_pick {
-                    if let Some(rx) = &self.ui.wim_rx {
+            if let Some(rx) = &self.ui.wim_rx {
                 if let Ok(res) = rx.try_recv() {
                     self.ui.awaiting_wim_pick = false;
                     self.ui.wim_rx = None;
@@ -2107,7 +2215,10 @@ impl App {
                 if r.contains(mx, my) {
                     match w {
                         Widget::WimPickOk => {
-                            let sel = self.ui.wim_pick_sel.min(self.ui.wim_pick.len().saturating_sub(1));
+                            let sel = self
+                                .ui
+                                .wim_pick_sel
+                                .min(self.ui.wim_pick.len().saturating_sub(1));
                             if let Some(i) = self.ui.wim_pick.get(sel) {
                                 self.ui.wim_index = i.index;
                                 self.push_log(crate::locale::trf(
@@ -2314,7 +2425,9 @@ impl App {
                     }
                     Widget::SliderTrack => {}
                     Widget::AdvancedToggle => self.ui.advanced_open = !self.ui.advanced_open,
-                    Widget::FmtAdvancedToggle => self.ui.fmt_advanced_open = !self.ui.fmt_advanced_open,
+                    Widget::FmtAdvancedToggle => {
+                        self.ui.fmt_advanced_open = !self.ui.fmt_advanced_open
+                    }
                     Widget::LabelField => {
                         self.ui.focus_label = true;
                         clicked_field = true;
@@ -2331,10 +2444,7 @@ impl App {
                         // SetMBRProps auto-management (mbr_selected_by_user)
                         self.ui.use_mbr_id = !self.ui.use_mbr_id;
                         self.ui.mbr_selected_by_user = self.ui.use_mbr_id;
-                        self.status_timeout(
-                            "Use Rufus MBR with BIOS ID",
-                            self.ui.use_mbr_id,
-                        );
+                        self.status_timeout("Use Rufus MBR with BIOS ID", self.ui.use_mbr_id);
                     }
                     Widget::ChkExtendedLabel
                         if !self.ui.running && self.extended_label_enabled() =>
@@ -2346,7 +2456,9 @@ impl App {
                         );
                     }
                     Widget::ChkQuick if !self.ui.running => self.ui.quick = !self.ui.quick,
-                    Widget::ChkBadblocks if !self.ui.running => self.ui.badblocks = !self.ui.badblocks,
+                    Widget::ChkBadblocks if !self.ui.running => {
+                        self.ui.badblocks = !self.ui.badblocks
+                    }
                     Widget::ChkVerify if !self.ui.running => self.ui.verify = !self.ui.verify,
                     Widget::IconLog => self.ui.log_open = !self.ui.log_open,
                     Widget::IconInfo => self.ui.about = true,
@@ -2390,7 +2502,8 @@ impl App {
                             self.ui.status_is_error = false;
                             let path = self.ui.image_path.clone();
                             std::thread::spawn(move || {
-                                let _ = tx.send(engine::wim_image_list(std::path::Path::new(&path)).ok());
+                                let _ = tx
+                                    .send(engine::wim_image_list(std::path::Path::new(&path)).ok());
                             });
                             self.ui_dirty = true;
                         } else {
@@ -2400,11 +2513,9 @@ impl App {
                     Widget::Stop => {
                         if let Some(t) = &self.ui.cancel_token {
                             t.store(true, Ordering::Relaxed);
-                            self.ui.status = crate::locale::tr(
-                                self.ui.locale,
-                                "Cancelling - Please wait...",
-                            )
-                            .into();
+                            self.ui.status =
+                                crate::locale::tr(self.ui.locale, "Cancelling - Please wait...")
+                                    .into();
                             self.push_log(crate::locale::tr(self.ui.locale, "STOP requested"));
                         }
                     }
@@ -2463,7 +2574,11 @@ impl<'a> Painter<'a> {
     /// 1.. = fallback chain).
     fn entry_at(&self, fi: usize, bold: bool) -> &FontEntry {
         if fi == 0 {
-            if bold { &self.fonts.bold } else { &self.fonts.regular }
+            if bold {
+                &self.fonts.bold
+            } else {
+                &self.fonts.regular
+            }
         } else {
             &self.fonts.fallbacks[fi - 1]
         }
@@ -2471,7 +2586,11 @@ impl<'a> Painter<'a> {
 
     /// First font (primary then fallbacks) that actually has a glyph for `c`.
     fn pick_font(&self, c: char, bold: bool) -> usize {
-        let primary = if bold { &self.fonts.bold.font } else { &self.fonts.regular.font };
+        let primary = if bold {
+            &self.fonts.bold.font
+        } else {
+            &self.fonts.regular.font
+        };
         if primary.glyph_id(c) != ab_glyph::GlyphId(0) {
             return 0;
         }
@@ -2501,7 +2620,12 @@ impl<'a> Painter<'a> {
                 if prev_fi == Some(fi) {
                     cx += sf.kern(prev_gid, gid);
                 }
-                out.push(LayoutGlyph { x: cx, y: 0.0, gid: gid.0, fi });
+                out.push(LayoutGlyph {
+                    x: cx,
+                    y: 0.0,
+                    gid: gid.0,
+                    fi,
+                });
                 cx += sf.h_advance(gid);
                 prev_fi = Some(fi);
                 prev_gid = gid;
@@ -2522,7 +2646,10 @@ impl<'a> Painter<'a> {
                 let mut best_cov = -1i32;
                 for fi in 0..=self.fonts.fallbacks.len() {
                     let f = &self.entry_at(fi, bold).font;
-                    let cov = chars.iter().filter(|&&c| f.glyph_id(c) != ab_glyph::GlyphId(0) || c == ' ').count() as i32;
+                    let cov = chars
+                        .iter()
+                        .filter(|&&c| f.glyph_id(c) != ab_glyph::GlyphId(0) || c == ' ')
+                        .count() as i32;
                     if cov > best_cov {
                         best_cov = cov;
                         best_fi = fi;
@@ -2565,26 +2692,29 @@ impl<'a> Painter<'a> {
         let baseline = y + self.fonts.regular.font.as_scaled(size).ascent();
         for g in glyphs {
             let sf = self.entry_at(g.fi, bold).font.as_scaled(size);
-            let glyph = ab_glyph::GlyphId(g.gid)
-                .with_scale_and_position(ab_glyph::PxScale::from(size), ab_glyph::point(x + g.x, baseline - g.y));
+            let glyph = ab_glyph::GlyphId(g.gid).with_scale_and_position(
+                ab_glyph::PxScale::from(size),
+                ab_glyph::point(x + g.x, baseline - g.y),
+            );
             if let Some(og) = sf.outline_glyph(glyph) {
                 let pb = og.px_bounds();
-                    og.draw(|gx, gy, cov| {
-                        let ix = pb.min.x as i32 + gx as i32;
-                        let iy = pb.min.y as i32 + gy as i32;
-                        if ix >= 0 && iy >= 0 && (ix as usize) < self.w && (iy as usize) < self.h {
-                            let idx = iy as usize * self.w + ix as usize;
-                            let dst = &mut self.buf[idx];
-                            let a = (cov.clamp(0.0, 1.0) * 255.0) as u32;
-                            let (r0, g0, b0) = ((color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff);
-                            let or_ = (*dst >> 16) & 0xff;
-                            let og_ = (*dst >> 8) & 0xff;
-                            let ob = *dst & 0xff;
-                            *dst = (((or_ * (255 - a) + r0 * a) / 255) << 16)
-                                | (((og_ * (255 - a) + g0 * a) / 255) << 8)
-                                | ((ob * (255 - a) + b0 * a) / 255);
-                        }
-                    });
+                og.draw(|gx, gy, cov| {
+                    let ix = pb.min.x as i32 + gx as i32;
+                    let iy = pb.min.y as i32 + gy as i32;
+                    if ix >= 0 && iy >= 0 && (ix as usize) < self.w && (iy as usize) < self.h {
+                        let idx = iy as usize * self.w + ix as usize;
+                        let dst = &mut self.buf[idx];
+                        let a = (cov.clamp(0.0, 1.0) * 255.0) as u32;
+                        let (r0, g0, b0) =
+                            ((color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff);
+                        let or_ = (*dst >> 16) & 0xff;
+                        let og_ = (*dst >> 8) & 0xff;
+                        let ob = *dst & 0xff;
+                        *dst = (((or_ * (255 - a) + r0 * a) / 255) << 16)
+                            | (((og_ * (255 - a) + g0 * a) / 255) << 8)
+                            | ((ob * (255 - a) + b0 * a) / 255);
+                    }
+                });
             }
         }
     }
@@ -2611,10 +2741,42 @@ impl<'a> Painter<'a> {
     }
 
     fn frame(&mut self, r: Rect, c: u32) {
-        self.fill(Rect { x: r.x, y: r.y, w: r.w, h: 1.0 }, c);
-        self.fill(Rect { x: r.x, y: r.y + r.h - 1.0, w: r.w, h: 1.0 }, c);
-        self.fill(Rect { x: r.x, y: r.y, w: 1.0, h: r.h }, c);
-        self.fill(Rect { x: r.x + r.w - 1.0, y: r.y, w: 1.0, h: r.h }, c);
+        self.fill(
+            Rect {
+                x: r.x,
+                y: r.y,
+                w: r.w,
+                h: 1.0,
+            },
+            c,
+        );
+        self.fill(
+            Rect {
+                x: r.x,
+                y: r.y + r.h - 1.0,
+                w: r.w,
+                h: 1.0,
+            },
+            c,
+        );
+        self.fill(
+            Rect {
+                x: r.x,
+                y: r.y,
+                w: 1.0,
+                h: r.h,
+            },
+            c,
+        );
+        self.fill(
+            Rect {
+                x: r.x + r.w - 1.0,
+                y: r.y,
+                w: 1.0,
+                h: r.h,
+            },
+            c,
+        );
     }
 
     /// Rufus section header: bold title + rule to the right margin.
@@ -2629,13 +2791,23 @@ fn p_section(p: &mut Painter, m: f32, width: f32, y: f32, title: &str) {
     let lx = m + tw + 14.0;
     let ly = y + 11.0;
     if lx < width - m {
-        p.fill(Rect { x: lx, y: ly, w: width - m - lx, h: 2.0 }, TEXT);
+        p.fill(
+            Rect {
+                x: lx,
+                y: ly,
+                w: width - m - lx,
+                h: 2.0,
+            },
+            TEXT,
+        );
     }
 }
 
 impl App {
     fn render(&mut self) {
-        let Some(window) = self.window.clone() else { return };
+        let Some(window) = self.window.clone() else {
+            return;
+        };
         let size = window.inner_size();
         // snapshot dropdown/slider data before the painter borrows self
         let dd_state = self
@@ -2649,8 +2821,13 @@ impl App {
         // Image-option combo text/state (also needs pre-borrow computation)
         let imgopt_state = {
             let items = self.dd_items(DD::ImageOption);
-            let sel = self.dd_selected(DD::ImageOption).min(items.len().saturating_sub(1));
-            (items.get(sel).cloned().unwrap_or_default(), sel < items.len().saturating_sub(1) || items.len() > 1)
+            let sel = self
+                .dd_selected(DD::ImageOption)
+                .min(items.len().saturating_sub(1));
+            (
+                items.get(sel).cloned().unwrap_or_default(),
+                sel < items.len().saturating_sub(1) || items.len() > 1,
+            )
         };
         // advanced-options enable states (Rufus EnableMBRBootOptions /
         // EnableExtendedLabel parity) — pre-borrow computation like the above
@@ -2671,10 +2848,19 @@ impl App {
         };
         let bw = buffer.width().get() as usize;
         let pixels = buffer.as_mut();
-        for p in pixels.iter_mut() { *p = BG; }
+        for p in pixels.iter_mut() {
+            *p = BG;
+        }
 
-        let Some(fonts) = self.ui.fonts.as_ref() else { return };
-        let mut p = Painter { buf: pixels, w: bw, h: size.height as usize, fonts: fonts.clone() };
+        let Some(fonts) = self.ui.fonts.as_ref() else {
+            return;
+        };
+        let mut p = Painter {
+            buf: pixels,
+            w: bw,
+            h: size.height as usize,
+            fonts: fonts.clone(),
+        };
         self.ui.widgets.clear();
         self.ui.dd_rect = None;
         self.ui.slider_rect = None;
@@ -2706,20 +2892,45 @@ impl App {
             }
         };
         let info_w = 34.0;
-        let dev_rect = Rect { x: m, y, w: full_w - info_w - 8.0, h: COMBO_H };
-        Self::draw_combo(&mut p, dev_rect, &dev_text, enabled && !self.ui.devices.is_empty(), false, self.mouse);
+        let dev_rect = Rect {
+            x: m,
+            y,
+            w: full_w - info_w - 8.0,
+            h: COMBO_H,
+        };
+        Self::draw_combo(
+            &mut p,
+            dev_rect,
+            &dev_text,
+            enabled && !self.ui.devices.is_empty(),
+            false,
+            self.mouse,
+        );
         self.ui.widgets.push((dev_rect, Widget::Combo(DD::Device)));
         dd_rects.insert(DD::Device, dev_rect);
         // small disk-icon button (toggles drive-properties section, like Rufus)
-        let icon_rect = Rect { x: m + full_w - info_w, y: y - 2.0, w: info_w, h: COMBO_H + 4.0 };
+        let icon_rect = Rect {
+            x: m + full_w - info_w,
+            y: y - 2.0,
+            w: info_w,
+            h: COMBO_H + 4.0,
+        };
         Self::draw_icon_button(&mut p, icon_rect, IconKind::Disk, true, self.mouse);
         self.ui.widgets.push((icon_rect, Widget::DeviceInfo));
         y += COMBO_H + 8.0;
 
-        p.text(m, y, crate::locale::tr(lang, "Boot selection"), 13.0, TEXT, false);
+        p.text(
+            m,
+            y,
+            crate::locale::tr(lang, "Boot selection"),
+            13.0,
+            TEXT,
+            false,
+        );
         y += 17.0;
         let select_w = 104.0; // SELECT main segment + recent-files arrow
-        let boot_parsed = matches!(&self.ui.iso_cache, Some((p_, Some(_))) if *p_ == self.ui.image_path);
+        let boot_parsed =
+            matches!(&self.ui.iso_cache, Some((p_, Some(_))) if *p_ == self.ui.image_path);
         let hash_clickable = boot_parsed && self.ui.hash_state.is_some();
         let boot_text = match self.ui.boot_mode {
             BootMode::NonBootable => crate::locale::tr(lang, "Non bootable").to_string(),
@@ -2728,9 +2939,18 @@ impl App {
                 if self.ui.image_path.is_empty() {
                     // Rufus composes the "(Please select)" suffix (msgid
                     // "%s (Please select)")
-                    crate::locale::trf(lang, "%s (Please select)", &[crate::locale::tr(lang, "Disk or ISO image")])
+                    crate::locale::trf(
+                        lang,
+                        "%s (Please select)",
+                        &[crate::locale::tr(lang, "Disk or ISO image")],
+                    )
                 } else {
-                    self.ui.image_path.rsplit('/').next().unwrap_or(&self.ui.image_path).to_string()
+                    self.ui
+                        .image_path
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or(&self.ui.image_path)
+                        .to_string()
                 }
             }
         };
@@ -2754,22 +2974,79 @@ impl App {
             let cy = y + COMBO_H / 2.0;
             let on = boot_parsed && hash_clickable;
             p.disc(cx, cy, 9.0, if on { ACCENT } else { TEXT_DIS });
-            p.fill(Rect { x: cx - 5.0, y: cy - 1.0, w: 3.0, h: 5.0 }, FIELD);
-            p.fill(Rect { x: cx - 3.0, y: cy + 1.0, w: 3.0, h: 5.0 }, FIELD);
-            p.fill(Rect { x: cx - 1.0, y: cy - 3.0, w: 3.0, h: 5.0 }, FIELD);
-            self.ui.widgets.push((Rect { x: cx - 12.0, y: cy - 12.0, w: 24.0, h: 24.0 }, Widget::HashBtn));
+            p.fill(
+                Rect {
+                    x: cx - 5.0,
+                    y: cy - 1.0,
+                    w: 3.0,
+                    h: 5.0,
+                },
+                FIELD,
+            );
+            p.fill(
+                Rect {
+                    x: cx - 3.0,
+                    y: cy + 1.0,
+                    w: 3.0,
+                    h: 5.0,
+                },
+                FIELD,
+            );
+            p.fill(
+                Rect {
+                    x: cx - 1.0,
+                    y: cy - 3.0,
+                    w: 3.0,
+                    h: 5.0,
+                },
+                FIELD,
+            );
+            self.ui.widgets.push((
+                Rect {
+                    x: cx - 12.0,
+                    y: cy - 12.0,
+                    w: 24.0,
+                    h: 24.0,
+                },
+                Widget::HashBtn,
+            ));
         }
         // split SELECT button (main + recent-files arrow); the "⬇ DOWNLOAD"
         // action lives at the top of the arrow's dropdown — one button, one
         // menu, instead of two side-by-side buttons
-        let sel_main = Rect { x: m + full_w - select_w, y, w: 78.0, h: COMBO_H };
-        let sel_arrow = Rect { x: m + full_w - select_w + 78.0, y, w: 26.0, h: COMBO_H };
-        Self::draw_button(&mut p, sel_main, crate::locale::tr(lang, "SELECT"), enabled, self.mouse, false);
+        let sel_main = Rect {
+            x: m + full_w - select_w,
+            y,
+            w: 78.0,
+            h: COMBO_H,
+        };
+        let sel_arrow = Rect {
+            x: m + full_w - select_w + 78.0,
+            y,
+            w: 26.0,
+            h: COMBO_H,
+        };
+        Self::draw_button(
+            &mut p,
+            sel_main,
+            crate::locale::tr(lang, "SELECT"),
+            enabled,
+            self.mouse,
+            false,
+        );
         Self::draw_combo(&mut p, sel_arrow, "", enabled, false, self.mouse);
         self.ui.widgets.push((sel_main, Widget::BootSelect));
         self.ui.widgets.push((sel_arrow, Widget::BootSelectArrow));
         // anchor the recent-files dropdown to the arrow, but wide enough for paths
-        dd_rects.insert(DD::Recent, Rect { x: m + full_w - 300.0, y: sel_arrow.y, w: 300.0, h: COMBO_H });
+        dd_rects.insert(
+            DD::Recent,
+            Rect {
+                x: m + full_w - 300.0,
+                y: sel_arrow.y,
+                w: 300.0,
+                h: COMBO_H,
+            },
+        );
         y += COMBO_H + 6.0;
 
         // --- Image option (Windows ISOs only, like Rufus) ---
@@ -2789,13 +3066,34 @@ impl App {
             .unwrap_or(false);
         let wtg = windows_iso && has_wininst && self.ui.image_option == 1;
         if windows_iso {
-            p.text(m, y, crate::locale::tr(lang, "Image Option"), 13.0, TEXT, false);
+            p.text(
+                m,
+                y,
+                crate::locale::tr(lang, "Image Option"),
+                13.0,
+                TEXT,
+                false,
+            );
             y += 17.0;
-            let opt_rect = Rect { x: m, y, w: full_w, h: COMBO_H };
+            let opt_rect = Rect {
+                x: m,
+                y,
+                w: full_w,
+                h: COMBO_H,
+            };
             let (opt_text, opt_has_wtg) = imgopt_state;
             // interactive once the ISO carries an install.wim/esd
-            Self::draw_combo(&mut p, opt_rect, &opt_text, enabled && opt_has_wtg, false, self.mouse);
-            self.ui.widgets.push((opt_rect, Widget::Combo(DD::ImageOption)));
+            Self::draw_combo(
+                &mut p,
+                opt_rect,
+                &opt_text,
+                enabled && opt_has_wtg,
+                false,
+                self.mouse,
+            );
+            self.ui
+                .widgets
+                .push((opt_rect, Widget::Combo(DD::ImageOption)));
             dd_rects.insert(DD::ImageOption, opt_rect);
             y += COMBO_H + 8.0;
         }
@@ -2806,7 +3104,14 @@ impl App {
             && !windows_iso
             && !wtg; // Rufus offers no persistence alongside Windows To Go
         if show_persist {
-            p.text(m, y, crate::locale::tr(lang, "Persistent partition size"), 13.0, TEXT, false);
+            p.text(
+                m,
+                y,
+                crate::locale::tr(lang, "Persistent partition size"),
+                13.0,
+                TEXT,
+                false,
+            );
             y += 17.0;
             let slider_w = full_w - 160.0;
             let dev = self.ui.devices.get(self.ui.sel_dev);
@@ -2824,77 +3129,226 @@ impl App {
                 }
                 None => 32,
             };
-            let cur_gb = self.ui.persist_gb_str.trim().parse::<u64>().unwrap_or(0).min(max_gb);
+            let cur_gb = self
+                .ui
+                .persist_gb_str
+                .trim()
+                .parse::<u64>()
+                .unwrap_or(0)
+                .min(max_gb);
             self.ui.persist_gb_str = cur_gb.to_string();
-            let slider = Rect { x: m + 2.0, y: y + 2.0, w: slider_w - 4.0, h: 20.0 };
+            let slider = Rect {
+                x: m + 2.0,
+                y: y + 2.0,
+                w: slider_w - 4.0,
+                h: 20.0,
+            };
             self.ui.slider_rect = Some((slider, max_gb));
             // track + fill + handle
             let track_y = y + 11.0;
-            p.fill(Rect { x: slider.x, y: track_y, w: slider.w, h: 4.0 }, 0xB4B4B4);
+            p.fill(
+                Rect {
+                    x: slider.x,
+                    y: track_y,
+                    w: slider.w,
+                    h: 4.0,
+                },
+                0xB4B4B4,
+            );
             if max_gb > 0 {
                 let frac = cur_gb as f32 / max_gb as f32;
-                p.fill(Rect { x: slider.x, y: track_y, w: (slider.w * frac).max(1.0), h: 4.0 }, ACCENT);
+                p.fill(
+                    Rect {
+                        x: slider.x,
+                        y: track_y,
+                        w: (slider.w * frac).max(1.0),
+                        h: 4.0,
+                    },
+                    ACCENT,
+                );
                 let hx = slider.x + slider.w * frac - 5.0;
-                let handle = Rect { x: hx, y: y + 2.0, w: 10.0, h: 20.0 };
+                let handle = Rect {
+                    x: hx,
+                    y: y + 2.0,
+                    w: 10.0,
+                    h: 20.0,
+                };
                 p.fill(handle, ACCENT);
                 p.frame(handle, 0x16608F);
             }
             if max_gb == 0 {
                 // no room for persistence — grey the track out
-                p.fill(Rect { x: slider.x, y: track_y, w: slider.w, h: 4.0 }, BORDER_DIS);
+                p.fill(
+                    Rect {
+                        x: slider.x,
+                        y: track_y,
+                        w: slider.w,
+                        h: 4.0,
+                    },
+                    BORDER_DIS,
+                );
             }
             self.ui.widgets.push((slider, Widget::SliderTrack));
             // value field + GB unit combo
-            let val_rect = Rect { x: m + full_w - 150.0, y, w: 62.0, h: COMBO_H };
+            let val_rect = Rect {
+                x: m + full_w - 150.0,
+                y,
+                w: 62.0,
+                h: COMBO_H,
+            };
             Self::draw_field(&mut p, val_rect, &self.ui.persist_gb_str, false, enabled);
-            let gb_rect = Rect { x: m + full_w - 80.0, y, w: 80.0, h: COMBO_H };
+            let gb_rect = Rect {
+                x: m + full_w - 80.0,
+                y,
+                w: 80.0,
+                h: COMBO_H,
+            };
             Self::draw_combo(&mut p, gb_rect, "GB", false, false, self.mouse);
             y += 32.0;
         }
 
-        p.text(m, y, crate::locale::tr(lang, "Partition scheme"), 13.0, TEXT, false);
-        p.text(m + full_w / 2.0 + 8.0, y, crate::locale::tr(lang, "Target system"), 13.0, TEXT, false);
+        p.text(
+            m,
+            y,
+            crate::locale::tr(lang, "Partition scheme"),
+            13.0,
+            TEXT,
+            false,
+        );
+        p.text(
+            m + full_w / 2.0 + 8.0,
+            y,
+            crate::locale::tr(lang, "Target system"),
+            13.0,
+            TEXT,
+            false,
+        );
         y += 17.0;
-        let scheme_rect = Rect { x: m, y, w: half, h: COMBO_H };
-        let target_rect = Rect { x: m + full_w / 2.0 + 8.0, y, w: half, h: COMBO_H };
-        Self::draw_combo(&mut p, scheme_rect, crate::locale::tr(lang, SCHEME_NAMES[if self.ui.gpt { 1 } else { 0 }]), enabled, false, self.mouse);
-        Self::draw_combo(&mut p, target_rect, crate::locale::tr(lang, TARGET_NAMES[if self.ui.efi_only { 1 } else { 0 }]), enabled, false, self.mouse);
-        self.ui.widgets.push((scheme_rect, Widget::Combo(DD::Scheme)));
-        self.ui.widgets.push((target_rect, Widget::Combo(DD::Target)));
+        let scheme_rect = Rect {
+            x: m,
+            y,
+            w: half,
+            h: COMBO_H,
+        };
+        let target_rect = Rect {
+            x: m + full_w / 2.0 + 8.0,
+            y,
+            w: half,
+            h: COMBO_H,
+        };
+        Self::draw_combo(
+            &mut p,
+            scheme_rect,
+            crate::locale::tr(lang, SCHEME_NAMES[if self.ui.gpt { 1 } else { 0 }]),
+            enabled,
+            false,
+            self.mouse,
+        );
+        Self::draw_combo(
+            &mut p,
+            target_rect,
+            crate::locale::tr(lang, TARGET_NAMES[if self.ui.efi_only { 1 } else { 0 }]),
+            enabled,
+            false,
+            self.mouse,
+        );
+        self.ui
+            .widgets
+            .push((scheme_rect, Widget::Combo(DD::Scheme)));
+        self.ui
+            .widgets
+            .push((target_rect, Widget::Combo(DD::Target)));
         dd_rects.insert(DD::Scheme, scheme_rect);
         dd_rects.insert(DD::Target, target_rect);
         y += COMBO_H + 8.0;
 
         // --- advanced drive properties (Rufus "Show %s"/"Hide %s" msgids) ---
         let adv_text = if self.ui.advanced_open {
-            format!("\u{25b4} {}", crate::locale::trf(lang, "Hide %s", &[crate::locale::tr(lang, "advanced drive properties")]))
+            format!(
+                "\u{25b4} {}",
+                crate::locale::trf(
+                    lang,
+                    "Hide %s",
+                    &[crate::locale::tr(lang, "advanced drive properties")]
+                )
+            )
         } else {
-            format!("\u{25b8} {}", crate::locale::trf(lang, "Show %s", &[crate::locale::tr(lang, "advanced drive properties")]))
+            format!(
+                "\u{25b8} {}",
+                crate::locale::trf(
+                    lang,
+                    "Show %s",
+                    &[crate::locale::tr(lang, "advanced drive properties")]
+                )
+            )
         };
         p.text(m, y, &adv_text, 13.0, TEXT, false);
-        let adv_rect = Rect { x: m, y: y - 2.0, w: p.text_w(&adv_text, 13.0, false) + 12.0, h: 22.0 };
+        let adv_rect = Rect {
+            x: m,
+            y: y - 2.0,
+            w: p.text_w(&adv_text, 13.0, false) + 12.0,
+            h: 22.0,
+        };
         self.ui.widgets.push((adv_rect, Widget::AdvancedToggle));
         y += 24.0;
 
         if self.ui.advanced_open {
             let list_hdd = crate::locale::tr(lang, "List USB Hard Drives");
             Self::draw_checkbox(&mut p, m, y, list_hdd, self.ui.list_usb_hdd, enabled);
-            self.ui.widgets.push((Rect { x: m, y: y - 2.0, w: p.text_w(list_hdd, 13.0, false) + 30.0, h: 20.0 }, Widget::ChkListHdd));
+            self.ui.widgets.push((
+                Rect {
+                    x: m,
+                    y: y - 2.0,
+                    w: p.text_w(list_hdd, 13.0, false) + 30.0,
+                    h: 20.0,
+                },
+                Widget::ChkListHdd,
+            ));
             y += 21.0;
-            let old_bios = crate::locale::tr(lang, "Add fixes for old BIOSes (extra partition, align, etc.)");
+            let old_bios = crate::locale::tr(
+                lang,
+                "Add fixes for old BIOSes (extra partition, align, etc.)",
+            );
             Self::draw_checkbox(&mut p, m, y, old_bios, self.ui.old_bios_fixes, enabled);
-            self.ui.widgets.push((Rect { x: m, y: y - 2.0, w: p.text_w(old_bios, 13.0, false) + 30.0, h: 20.0 }, Widget::ChkOldBios));
+            self.ui.widgets.push((
+                Rect {
+                    x: m,
+                    y: y - 2.0,
+                    w: p.text_w(old_bios, 13.0, false) + 30.0,
+                    h: 20.0,
+                },
+                Widget::ChkOldBios,
+            ));
             y += 21.0;
             // "Use Rufus MBR with BIOS ID" + the IDC_DISK_ID masquerade combo
             // (rufus.c: enabled for MBR+BIOS bootable writes, Windows images)
             let mbr_enabled = enabled && mbr_row_state;
             let mbr_txt = crate::locale::tr(lang, "Use Rufus MBR with BIOS ID");
             Self::draw_checkbox(&mut p, m, y, mbr_txt, self.ui.use_mbr_id, mbr_enabled);
-            self.ui.widgets.push((Rect { x: m, y: y - 2.0, w: p.text_w(mbr_txt, 13.0, false) + 30.0, h: 20.0 }, Widget::ChkMbrId));
-            let id_rect = Rect { x: m + full_w / 2.0 + 8.0, y: y - 1.0, w: 220.0, h: COMBO_H };
+            self.ui.widgets.push((
+                Rect {
+                    x: m,
+                    y: y - 2.0,
+                    w: p.text_w(mbr_txt, 13.0, false) + 30.0,
+                    h: 20.0,
+                },
+                Widget::ChkMbrId,
+            ));
+            let id_rect = Rect {
+                x: m + full_w / 2.0 + 8.0,
+                y: y - 1.0,
+                w: 220.0,
+                h: COMBO_H,
+            };
             let id_sel = self.ui.disk_id_sel.min(disk_ids.len() - 1);
-            Self::draw_combo(&mut p, id_rect, &disk_ids[id_sel],
-                mbr_enabled, self.ui.open_dd == Some(DD::DiskId), self.mouse);
+            Self::draw_combo(
+                &mut p,
+                id_rect,
+                &disk_ids[id_sel],
+                mbr_enabled,
+                self.ui.open_dd == Some(DD::DiskId),
+                self.mouse,
+            );
             self.ui.widgets.push((id_rect, Widget::Combo(DD::DiskId)));
             dd_rects.insert(DD::DiskId, id_rect);
             y += 26.0;
@@ -2904,18 +3358,60 @@ impl App {
         p.section(m, width, y, crate::locale::tr(lang, "Format Options"));
         y += 32.0;
 
-        p.text(m, y, crate::locale::tr(lang, "Volume label"), 13.0, TEXT, false);
+        p.text(
+            m,
+            y,
+            crate::locale::tr(lang, "Volume label"),
+            13.0,
+            TEXT,
+            false,
+        );
         y += 17.0;
-        let lbl_rect = Rect { x: m, y, w: full_w, h: COMBO_H };
-        Self::draw_field(&mut p, lbl_rect, &self.ui.label, self.ui.focus_label, enabled);
+        let lbl_rect = Rect {
+            x: m,
+            y,
+            w: full_w,
+            h: COMBO_H,
+        };
+        Self::draw_field(
+            &mut p,
+            lbl_rect,
+            &self.ui.label,
+            self.ui.focus_label,
+            enabled,
+        );
         self.ui.widgets.push((lbl_rect, Widget::LabelField));
         y += COMBO_H + 8.0;
 
-        p.text(m, y, crate::locale::tr(lang, "File system"), 13.0, TEXT, false);
-        p.text(m + full_w / 2.0 + 8.0, y, crate::locale::tr(lang, "Cluster size"), 13.0, TEXT, false);
+        p.text(
+            m,
+            y,
+            crate::locale::tr(lang, "File system"),
+            13.0,
+            TEXT,
+            false,
+        );
+        p.text(
+            m + full_w / 2.0 + 8.0,
+            y,
+            crate::locale::tr(lang, "Cluster size"),
+            13.0,
+            TEXT,
+            false,
+        );
         y += 17.0;
-        let fs_rect = Rect { x: m, y, w: half, h: COMBO_H };
-        let clu_rect = Rect { x: m + full_w / 2.0 + 8.0, y, w: half, h: COMBO_H };
+        let fs_rect = Rect {
+            x: m,
+            y,
+            w: half,
+            h: COMBO_H,
+        };
+        let clu_rect = Rect {
+            x: m + full_w / 2.0 + 8.0,
+            y,
+            w: half,
+            h: COMBO_H,
+        };
         // DOS requires FAT32; Windows To Go is NTFS-only (Rufus MSG_097)
         let fs_locked = self.ui.boot_mode == BootMode::FreeDos || wtg;
         let fs_text = if self.ui.boot_mode == BootMode::FreeDos {
@@ -2929,7 +3425,14 @@ impl App {
                 .map(|(_, s)| s.clone())
                 .unwrap_or_else(|| Self::fs_display(lang, self.ui.fs_sel.min(2)))
         };
-        Self::draw_combo(&mut p, fs_rect, &fs_text, enabled && !fs_locked, false, self.mouse);
+        Self::draw_combo(
+            &mut p,
+            fs_rect,
+            &fs_text,
+            enabled && !fs_locked,
+            false,
+            self.mouse,
+        );
         // honest cluster display: what the native formatter would pick for
         // the selected device (falls back to the Rufus default), with the
         // "%s (Default)" + "bytes" msgids for the "(Default)" suffix
@@ -2940,48 +3443,119 @@ impl App {
             },
             None => Self::cluster_display(lang, 4096),
         };
-        Self::draw_combo(&mut p, clu_rect, &cluster_text.clone(), false, false, self.mouse);
+        Self::draw_combo(
+            &mut p,
+            clu_rect,
+            &cluster_text.clone(),
+            false,
+            false,
+            self.mouse,
+        );
         self.ui.widgets.push((fs_rect, Widget::Combo(DD::Fs)));
         dd_rects.insert(DD::Fs, fs_rect);
         y += COMBO_H + 8.0;
 
         let fmt_text = if self.ui.fmt_advanced_open {
-            format!("\u{25be} {}", crate::locale::trf(lang, "Hide %s", &[crate::locale::tr(lang, "advanced format options")]))
+            format!(
+                "\u{25be} {}",
+                crate::locale::trf(
+                    lang,
+                    "Hide %s",
+                    &[crate::locale::tr(lang, "advanced format options")]
+                )
+            )
         } else {
-            format!("\u{25b8} {}", crate::locale::trf(lang, "Show %s", &[crate::locale::tr(lang, "advanced format options")]))
+            format!(
+                "\u{25b8} {}",
+                crate::locale::trf(
+                    lang,
+                    "Show %s",
+                    &[crate::locale::tr(lang, "advanced format options")]
+                )
+            )
         };
         p.text(m, y, &fmt_text, 13.0, TEXT, false);
-        let fmt_rect = Rect { x: m, y: y - 2.0, w: p.text_w(&fmt_text, 13.0, false) + 12.0, h: 22.0 };
+        let fmt_rect = Rect {
+            x: m,
+            y: y - 2.0,
+            w: p.text_w(&fmt_text, 13.0, false) + 12.0,
+            h: 22.0,
+        };
         self.ui.widgets.push((fmt_rect, Widget::FmtAdvancedToggle));
         y += 24.0;
 
         if self.ui.fmt_advanced_open {
             let quick = crate::locale::tr(lang, "Quick format");
             Self::draw_checkbox(&mut p, m, y, quick, self.ui.quick, enabled);
-            self.ui.widgets.push((Rect { x: m, y: y - 2.0, w: p.text_w(quick, 13.0, false) + 30.0, h: 20.0 }, Widget::ChkQuick));
+            self.ui.widgets.push((
+                Rect {
+                    x: m,
+                    y: y - 2.0,
+                    w: p.text_w(quick, 13.0, false) + 30.0,
+                    h: 20.0,
+                },
+                Widget::ChkQuick,
+            ));
             y += 21.0;
             // Rufus IDC_EXTENDED_LABEL (checked by default): autorun.inf +
             // autorun.ico on the volume; disabled for raw/DD writes
             let xl_enabled = enabled && ext_label_state;
             let xl_txt = crate::locale::tr(lang, "Create extended label and icon files");
             Self::draw_checkbox(&mut p, m, y, xl_txt, self.ui.extended_label, xl_enabled);
-            self.ui.widgets.push((Rect { x: m, y: y - 2.0, w: p.text_w(xl_txt, 13.0, false) + 30.0, h: 20.0 }, Widget::ChkExtendedLabel));
+            self.ui.widgets.push((
+                Rect {
+                    x: m,
+                    y: y - 2.0,
+                    w: p.text_w(xl_txt, 13.0, false) + 30.0,
+                    h: 20.0,
+                },
+                Widget::ChkExtendedLabel,
+            ));
             y += 21.0;
             // Rufus: "Check device for bad blocks" + the "Number of passes"
             // combobox for the destructive write test (combo only enabled
             // while the checkbox is checked)
             let bb_text = crate::locale::tr(lang, "Check device for bad blocks");
             Self::draw_checkbox(&mut p, m, y, bb_text, self.ui.badblocks, enabled);
-            self.ui.widgets.push((Rect { x: m, y: y - 2.0, w: p.text_w(bb_text, 13.0, false) + 30.0, h: 20.0 }, Widget::ChkBadblocks));
-            let passes_rect = Rect { x: m + full_w - 190.0, y: y - 3.0, w: 190.0, h: COMBO_H };
-            Self::draw_combo(&mut p, passes_rect, crate::locale::tr(lang, engine::BB_PASSES_NAMES[self.ui.bb_sel.min(4)]),
-                enabled && self.ui.badblocks, self.ui.open_dd == Some(DD::Passes), self.mouse);
-            self.ui.widgets.push((passes_rect, Widget::Combo(DD::Passes)));
+            self.ui.widgets.push((
+                Rect {
+                    x: m,
+                    y: y - 2.0,
+                    w: p.text_w(bb_text, 13.0, false) + 30.0,
+                    h: 20.0,
+                },
+                Widget::ChkBadblocks,
+            ));
+            let passes_rect = Rect {
+                x: m + full_w - 190.0,
+                y: y - 3.0,
+                w: 190.0,
+                h: COMBO_H,
+            };
+            Self::draw_combo(
+                &mut p,
+                passes_rect,
+                crate::locale::tr(lang, engine::BB_PASSES_NAMES[self.ui.bb_sel.min(4)]),
+                enabled && self.ui.badblocks,
+                self.ui.open_dd == Some(DD::Passes),
+                self.mouse,
+            );
+            self.ui
+                .widgets
+                .push((passes_rect, Widget::Combo(DD::Passes)));
             dd_rects.insert(DD::Passes, passes_rect);
             y += 26.0;
             let verify_txt = crate::locale::tr(lang, "Verify after write (SHA-256)");
             Self::draw_checkbox(&mut p, m, y, verify_txt, self.ui.verify, enabled);
-            self.ui.widgets.push((Rect { x: m, y: y - 2.0, w: p.text_w(verify_txt, 13.0, false) + 30.0, h: 20.0 }, Widget::ChkVerify));
+            self.ui.widgets.push((
+                Rect {
+                    x: m,
+                    y: y - 2.0,
+                    w: p.text_w(verify_txt, 13.0, false) + 30.0,
+                    h: 20.0,
+                },
+                Widget::ChkVerify,
+            ));
             y += 21.0;
             y += 6.0;
         }
@@ -2990,34 +3564,74 @@ impl App {
         p.section(m, width, y, crate::locale::tr(lang, "Status"));
         y += 34.0;
 
-        let bar = Rect { x: m, y, w: full_w, h: 26.0 };
+        let bar = Rect {
+            x: m,
+            y,
+            w: full_w,
+            h: 26.0,
+        };
         let (fill_color, fill_frac, bar_text, text_color) = if self.ui.status_is_error {
-            (READY_GREY, 0.0, crate::locale::trf(lang, "FAILED — {0}", &[&self.ui.status]), PROGRESS_ERR)
+            (
+                READY_GREY,
+                0.0,
+                crate::locale::trf(lang, "FAILED — {0}", &[&self.ui.status]),
+                PROGRESS_ERR,
+            )
         } else if running {
             let (phase, frac) = self.ui.progress.clone().unwrap_or(("start".into(), 0.0));
             let pct = ((frac * 100.0) as u32).min(100);
-            (PROGRESS_GREEN, frac, format!("{} ({}%)", pretty_phase(lang, &phase), pct), TEXT)
+            (
+                PROGRESS_GREEN,
+                frac,
+                format!("{} ({}%)", pretty_phase(lang, &phase), pct),
+                TEXT,
+            )
         } else if !self.ui.status.is_empty() {
             // Rufus PrintStatusTimeout: a timed flash (e.g. "Use Rufus MBR:
             // enabled") shown in the status bar until it expires
             (READY_GREY, 0.0, self.ui.status.clone(), TEXT)
         } else {
-            (READY_GREY, 0.0, crate::locale::tr(lang, "READY").to_string(), TEXT)
+            (
+                READY_GREY,
+                0.0,
+                crate::locale::tr(lang, "READY").to_string(),
+                TEXT,
+            )
         };
         p.fill(bar, READY_GREY);
         if fill_frac > 0.0 {
             let frac = fill_frac.clamp(0.0, 1.0) as f32;
-            p.fill(Rect { x: bar.x, y: bar.y, w: (bar.w * frac).max(1.0), h: bar.h }, fill_color);
+            p.fill(
+                Rect {
+                    x: bar.x,
+                    y: bar.y,
+                    w: (bar.w * frac).max(1.0),
+                    h: bar.h,
+                },
+                fill_color,
+            );
         }
         let btw = p.text_w(&bar_text, 13.0, false);
-        p.text(bar.x + (bar.w - btw) / 2.0, bar.y + 6.0, &bar_text, 13.0, text_color, false);
+        p.text(
+            bar.x + (bar.w - btw) / 2.0,
+            bar.y + 6.0,
+            &bar_text,
+            13.0,
+            text_color,
+            false,
+        );
         y += bar.h + 8.0;
 
         // --- inline log (toggled by the bottom log icon) ---
         // Rufus IDD_LOG parity: a scrolling log text with Clear | Save | Close
         if self.ui.log_open {
             let log_h = 150.0;
-            let log_rect = Rect { x: m, y, w: full_w, h: log_h };
+            let log_rect = Rect {
+                x: m,
+                y,
+                w: full_w,
+                h: log_h,
+            };
             p.fill(log_rect, FIELD);
             p.frame(log_rect, BORDER);
             self.ui.widgets.push((log_rect, Widget::LogScroll));
@@ -3039,7 +3653,14 @@ impl App {
             let mut ly = log_rect.y + 4.0;
             for line in &self.ui.log[start..] {
                 let disp: String = line.chars().take(96).collect();
-                p.text(log_rect.x + 6.0, ly, &disp, 11.0, log_line_color(line), false);
+                p.text(
+                    log_rect.x + 6.0,
+                    ly,
+                    &disp,
+                    11.0,
+                    log_line_color(line),
+                    false,
+                );
                 ly += line_h;
             }
             // Clear | Save | Close row, right-aligned under the text (Rufus)
@@ -3052,7 +3673,12 @@ impl App {
                 (crate::locale::tr(lang, "Save"), Widget::LogSave),
                 (crate::locale::tr(lang, "Close"), Widget::LogClose),
             ] {
-                let r = Rect { x: bx, y: row_y, w: btn_w, h: row_h };
+                let r = Rect {
+                    x: bx,
+                    y: row_y,
+                    w: btn_w,
+                    h: row_h,
+                };
                 Self::draw_button(&mut p, r, label, true, self.mouse, false);
                 self.ui.widgets.push((r, w));
                 bx += btn_w + 8.0;
@@ -3064,9 +3690,24 @@ impl App {
         // icon buttons + STOP/START + CLOSE ---
         let btn_y = y + 4.0;
         let btn_h = 32.0;
-        let lang_rect = Rect { x: m, y: btn_y, w: 132.0, h: btn_h };
-        let lang_name = crate::locale::LANGS.get(lang).map(|l| l.name).unwrap_or("English");
-        Self::draw_combo(&mut p, lang_rect, lang_name, true, self.ui.open_dd == Some(DD::Lang), self.mouse);
+        let lang_rect = Rect {
+            x: m,
+            y: btn_y,
+            w: 132.0,
+            h: btn_h,
+        };
+        let lang_name = crate::locale::LANGS
+            .get(lang)
+            .map(|l| l.name)
+            .unwrap_or("English");
+        Self::draw_combo(
+            &mut p,
+            lang_rect,
+            lang_name,
+            true,
+            self.ui.open_dd == Some(DD::Lang),
+            self.mouse,
+        );
         self.ui.widgets.push((lang_rect, Widget::Combo(DD::Lang)));
         dd_rects.insert(DD::Lang, lang_rect);
         // the small icons sit right of the language combo; they overlap the
@@ -3082,29 +3723,87 @@ impl App {
             .into_iter()
             .enumerate()
             {
-                let r = Rect { x: m + 132.0 + 8.0 + i as f32 * 32.0, y: btn_y + 2.0, w: 28.0, h: 28.0 };
+                let r = Rect {
+                    x: m + 132.0 + 8.0 + i as f32 * 32.0,
+                    y: btn_y + 2.0,
+                    w: 28.0,
+                    h: 28.0,
+                };
                 Self::draw_icon_button(&mut p, r, kind, true, self.mouse);
                 self.ui.widgets.push((r, w));
             }
         }
         let stop_w = if running { 90.0 } else { 0.0 };
         if running {
-            let stop_rect = Rect { x: width - m - 92.0 - 150.0 - 12.0 - stop_w, y: btn_y, w: stop_w, h: btn_h };
-            Self::draw_button(&mut p, stop_rect, crate::locale::tr(lang, "STOP"), true, self.mouse, false);
+            let stop_rect = Rect {
+                x: width - m - 92.0 - 150.0 - 12.0 - stop_w,
+                y: btn_y,
+                w: stop_w,
+                h: btn_h,
+            };
+            Self::draw_button(
+                &mut p,
+                stop_rect,
+                crate::locale::tr(lang, "STOP"),
+                true,
+                self.mouse,
+                false,
+            );
             self.ui.widgets.push((stop_rect, Widget::Stop));
         }
-        let start_rect = Rect { x: width - m - 92.0 - 150.0 - 12.0, y: btn_y, w: 150.0, h: btn_h };
-        Self::draw_button(&mut p, start_rect, if running { "WORKING..." } else { crate::locale::tr(lang, "START") }, start_enabled, self.mouse, true);
+        let start_rect = Rect {
+            x: width - m - 92.0 - 150.0 - 12.0,
+            y: btn_y,
+            w: 150.0,
+            h: btn_h,
+        };
+        Self::draw_button(
+            &mut p,
+            start_rect,
+            if running {
+                "WORKING..."
+            } else {
+                crate::locale::tr(lang, "START")
+            },
+            start_enabled,
+            self.mouse,
+            true,
+        );
         self.ui.widgets.push((start_rect, Widget::Start));
-        let close_rect = Rect { x: width - m - 92.0, y: btn_y, w: 92.0, h: btn_h };
-        Self::draw_button(&mut p, close_rect, crate::locale::tr(lang, "CLOSE"), true, self.mouse, false);
+        let close_rect = Rect {
+            x: width - m - 92.0,
+            y: btn_y,
+            w: 92.0,
+            h: btn_h,
+        };
+        Self::draw_button(
+            &mut p,
+            close_rect,
+            crate::locale::tr(lang, "CLOSE"),
+            true,
+            self.mouse,
+            false,
+        );
         self.ui.widgets.push((close_rect, Widget::Close));
         y = btn_y + btn_h + 6.0;
 
         // --- bottom status strip: device count + session timer ---
-        let strip = Rect { x: 0.0, y, w: width, h: 22.0 };
+        let strip = Rect {
+            x: 0.0,
+            y,
+            w: width,
+            h: 22.0,
+        };
         p.fill(strip, 0xE6E6E6);
-        p.fill(Rect { x: 0.0, y, w: width, h: 1.0 }, BORDER);
+        p.fill(
+            Rect {
+                x: 0.0,
+                y,
+                w: width,
+                h: 1.0,
+            },
+            BORDER,
+        );
         let n = self.ui.devices.len();
         let devices_txt = if n == 1 {
             crate::locale::trf(lang, "{0} device found", &[&n.to_string()])
@@ -3130,7 +3829,17 @@ impl App {
         if self.ui.confirm {
             let dev = self.ui.devices.get(self.ui.sel_dev);
             let dev_desc = dev
-                .map(|d| format!("{} [{}]", if d.model.is_empty() { &d.path } else { &d.model }, d.size_human()))
+                .map(|d| {
+                    format!(
+                        "{} [{}]",
+                        if d.model.is_empty() {
+                            &d.path
+                        } else {
+                            &d.model
+                        },
+                        d.size_human()
+                    )
+                })
                 .unwrap_or_default();
             // Rufus MSG_098: WTG on REMOVABLE media is not designed for and
             // usually freezes at boot — Rufus asks before proceeding; we fold
@@ -3139,10 +3848,22 @@ impl App {
                 Self::pending_is_wtg(&self.ui) && dev.map(|d| d.removable).unwrap_or(false);
             let pw = 460.0;
             let ph = if wtg_removable { 170.0 } else { 150.0 };
-            let panel = Rect { x: (width - pw) / 2.0, y: (size.height as f32 - ph) / 2.0, w: pw, h: ph };
+            let panel = Rect {
+                x: (width - pw) / 2.0,
+                y: (size.height as f32 - ph) / 2.0,
+                w: pw,
+                h: ph,
+            };
             p.fill(panel, FIELD);
             p.frame(panel, ACCENT);
-            p.text(panel.x + 12.0, panel.y + 10.0, "Rufus-linux", 13.0, TEXT, true);
+            p.text(
+                panel.x + 12.0,
+                panel.y + 10.0,
+                "Rufus-linux",
+                13.0,
+                TEXT,
+                true,
+            );
             let mut warning = crate::locale::trf(
                 lang,
                 "WARNING: ALL DATA ON DEVICE '{0}' WILL BE DESTROYED.\nTo continue with this operation, click OK. To quit click CANCEL.",
@@ -3156,12 +3877,43 @@ impl App {
                 ));
             }
             for (i, line) in warning.split('\n').enumerate() {
-                p.text(panel.x + 12.0, panel.y + 40.0 + i as f32 * 20.0, line, 12.0, TEXT, false);
+                p.text(
+                    panel.x + 12.0,
+                    panel.y + 40.0 + i as f32 * 20.0,
+                    line,
+                    12.0,
+                    TEXT,
+                    false,
+                );
             }
-            let ok = Rect { x: panel.x + panel.w - 210.0, y: panel.y + ph - 44.0, w: 90.0, h: 30.0 };
-            let cancel = Rect { x: panel.x + panel.w - 110.0, y: panel.y + ph - 44.0, w: 90.0, h: 30.0 };
-            Self::draw_button(&mut p, ok, crate::locale::tr(lang, "OK"), true, self.mouse, true);
-            Self::draw_button(&mut p, cancel, crate::locale::tr(lang, "Cancel"), true, self.mouse, false);
+            let ok = Rect {
+                x: panel.x + panel.w - 210.0,
+                y: panel.y + ph - 44.0,
+                w: 90.0,
+                h: 30.0,
+            };
+            let cancel = Rect {
+                x: panel.x + panel.w - 110.0,
+                y: panel.y + ph - 44.0,
+                w: 90.0,
+                h: 30.0,
+            };
+            Self::draw_button(
+                &mut p,
+                ok,
+                crate::locale::tr(lang, "OK"),
+                true,
+                self.mouse,
+                true,
+            );
+            Self::draw_button(
+                &mut p,
+                cancel,
+                crate::locale::tr(lang, "Cancel"),
+                true,
+                self.mouse,
+                false,
+            );
             self.ui.widgets.push((ok, Widget::ConfirmOk));
             self.ui.widgets.push((cancel, Widget::ConfirmCancel));
         }
@@ -3170,15 +3922,60 @@ impl App {
         if self.ui.about {
             let pw = 380.0;
             let ph = 140.0;
-            let panel = Rect { x: (width - pw) / 2.0, y: (size.height as f32 - ph) / 2.0, w: pw, h: ph };
+            let panel = Rect {
+                x: (width - pw) / 2.0,
+                y: (size.height as f32 - ph) / 2.0,
+                w: pw,
+                h: ph,
+            };
             p.fill(panel, FIELD);
             p.frame(panel, ACCENT);
-            p.text(panel.x + 14.0, panel.y + 12.0, "Rufus-linux", 16.0, TEXT, true);
-            p.text(panel.x + 14.0, panel.y + 42.0, crate::locale::tr(lang, "A Linux rewrite of Rufus"), 13.0, TEXT, false);
-            p.text(panel.x + 14.0, panel.y + 62.0, crate::locale::tr(lang, "Create bootable USB drives from ISO images"), 12.0, 0x505050, false);
-            p.text(panel.x + 14.0, panel.y + 82.0, "Licensed GPL-3.0 — https://github.com/pbatard/rufus", 12.0, 0x505050, false);
-            let close = Rect { x: panel.x + panel.w - 100.0, y: panel.y + ph - 40.0, w: 86.0, h: 28.0 };
-            Self::draw_button(&mut p, close, crate::locale::tr(lang, "Close"), true, self.mouse, false);
+            p.text(
+                panel.x + 14.0,
+                panel.y + 12.0,
+                "Rufus-linux",
+                16.0,
+                TEXT,
+                true,
+            );
+            p.text(
+                panel.x + 14.0,
+                panel.y + 42.0,
+                crate::locale::tr(lang, "A Linux rewrite of Rufus"),
+                13.0,
+                TEXT,
+                false,
+            );
+            p.text(
+                panel.x + 14.0,
+                panel.y + 62.0,
+                crate::locale::tr(lang, "Create bootable USB drives from ISO images"),
+                12.0,
+                0x505050,
+                false,
+            );
+            p.text(
+                panel.x + 14.0,
+                panel.y + 82.0,
+                "Licensed GPL-3.0 — https://github.com/pbatard/rufus",
+                12.0,
+                0x505050,
+                false,
+            );
+            let close = Rect {
+                x: panel.x + panel.w - 100.0,
+                y: panel.y + ph - 40.0,
+                w: 86.0,
+                h: 28.0,
+            };
+            Self::draw_button(
+                &mut p,
+                close,
+                crate::locale::tr(lang, "Close"),
+                true,
+                self.mouse,
+                false,
+            );
             self.ui.widgets.push((close, Widget::AboutClose));
         }
 
@@ -3186,27 +3983,88 @@ impl App {
         if self.ui.settings_open {
             let pw = 520.0;
             let ph = 336.0;
-            let panel = Rect { x: (width - pw) / 2.0, y: (size.height as f32 - ph) / 2.0, w: pw, h: ph };
+            let panel = Rect {
+                x: (width - pw) / 2.0,
+                y: (size.height as f32 - ph) / 2.0,
+                w: pw,
+                h: ph,
+            };
             p.fill(panel, FIELD);
             p.frame(panel, ACCENT);
             // header band (same style as the Windows User Experience dialog)
-            let header = Rect { x: panel.x, y: panel.y, w: panel.w, h: 34.0 };
+            let header = Rect {
+                x: panel.x,
+                y: panel.y,
+                w: panel.w,
+                h: 34.0,
+            };
             p.fill(header, 0xDCEBF5);
-            p.fill(Rect { x: panel.x, y: panel.y + 34.0, w: panel.w, h: 1.0 }, BORDER);
-            p.text(panel.x + 14.0, panel.y + 9.0, crate::locale::tr(lang, "Settings"), 14.0, TEXT, true);
+            p.fill(
+                Rect {
+                    x: panel.x,
+                    y: panel.y + 34.0,
+                    w: panel.w,
+                    h: 1.0,
+                },
+                BORDER,
+            );
+            p.text(
+                panel.x + 14.0,
+                panel.y + 9.0,
+                crate::locale::tr(lang, "Settings"),
+                14.0,
+                TEXT,
+                true,
+            );
             let mut cy = panel.y + 50.0;
-            p.text(panel.x + 20.0, cy, crate::locale::tr(lang, "Image checksums"), 12.0, ACCENT, true);
+            p.text(
+                panel.x + 20.0,
+                cy,
+                crate::locale::tr(lang, "Image checksums"),
+                12.0,
+                ACCENT,
+                true,
+            );
             cy += 22.0;
             // "Extra hashes (SHA512)" — Rufus MSG_312 (EnableExtraHashes)
             let extra_hashes = crate::locale::tr(lang, "Extra hashes (SHA512)");
-            Self::draw_checkbox(&mut p, panel.x + 30.0, cy, extra_hashes, self.ui.extra_hashes, true);
+            Self::draw_checkbox(
+                &mut p,
+                panel.x + 30.0,
+                cy,
+                extra_hashes,
+                self.ui.extra_hashes,
+                true,
+            );
             self.ui.widgets.push((
-                Rect { x: panel.x + 30.0, y: cy - 2.0, w: panel.w - 60.0, h: 20.0 },
+                Rect {
+                    x: panel.x + 30.0,
+                    y: cy - 2.0,
+                    w: panel.w - 60.0,
+                    h: 20.0,
+                },
                 Widget::SettingsChk(0),
             ));
-            p.text(panel.x + 46.0, cy + 17.0, crate::locale::tr(lang, "Show SHA-512 in the image hashes dialog — toggled with <Alt>-<H>"), 10.0, 0x808080, false);
+            p.text(
+                panel.x + 46.0,
+                cy + 17.0,
+                crate::locale::tr(
+                    lang,
+                    "Show SHA-512 in the image hashes dialog — toggled with <Alt>-<H>",
+                ),
+                10.0,
+                0x808080,
+                false,
+            );
             cy += 38.0;
-            p.text(panel.x + 20.0, cy, crate::locale::tr(lang, "Hidden settings"), 12.0, ACCENT, true);
+            p.text(
+                panel.x + 20.0,
+                cy,
+                crate::locale::tr(lang, "Hidden settings"),
+                12.0,
+                ACCENT,
+                true,
+            );
             cy += 22.0;
             let items: [(&str, &str, bool); 4] = [
                 (
@@ -3231,12 +4089,31 @@ impl App {
                 ),
             ];
             for (i, (label, hint, on)) in items.into_iter().enumerate() {
-                Self::draw_checkbox(&mut p, panel.x + 30.0, cy, crate::locale::tr(lang, label), on, true);
+                Self::draw_checkbox(
+                    &mut p,
+                    panel.x + 30.0,
+                    cy,
+                    crate::locale::tr(lang, label),
+                    on,
+                    true,
+                );
                 self.ui.widgets.push((
-                    Rect { x: panel.x + 30.0, y: cy - 2.0, w: panel.w - 60.0, h: 20.0 },
+                    Rect {
+                        x: panel.x + 30.0,
+                        y: cy - 2.0,
+                        w: panel.w - 60.0,
+                        h: 20.0,
+                    },
                     Widget::SettingsChk(i + 1),
                 ));
-                p.text(panel.x + 46.0, cy + 17.0, crate::locale::tr(lang, hint), 10.0, 0x808080, false);
+                p.text(
+                    panel.x + 46.0,
+                    cy + 17.0,
+                    crate::locale::tr(lang, hint),
+                    10.0,
+                    0x808080,
+                    false,
+                );
                 cy += 36.0;
             }
             p.text(
@@ -3247,8 +4124,20 @@ impl App {
                 0x808080,
                 false,
             );
-            let close = Rect { x: panel.x + panel.w - 100.0, y: panel.y + ph - 44.0, w: 86.0, h: 28.0 };
-            Self::draw_button(&mut p, close, crate::locale::tr(lang, "Close"), true, self.mouse, false);
+            let close = Rect {
+                x: panel.x + panel.w - 100.0,
+                y: panel.y + ph - 44.0,
+                w: 86.0,
+                h: 28.0,
+            };
+            Self::draw_button(
+                &mut p,
+                close,
+                crate::locale::tr(lang, "Close"),
+                true,
+                self.mouse,
+                false,
+            );
             self.ui.widgets.push((close, Widget::SettingsClose));
         }
 
@@ -3256,13 +4145,23 @@ impl App {
         if self.ui.hash_open {
             let pw = 480.0;
             let ph = 330.0;
-            let panel = Rect { x: (width - pw) / 2.0, y: (size.height as f32 - ph) / 2.0, w: pw, h: ph };
+            let panel = Rect {
+                x: (width - pw) / 2.0,
+                y: (size.height as f32 - ph) / 2.0,
+                w: pw,
+                h: ph,
+            };
             p.fill(panel, FIELD);
             p.frame(panel, ACCENT);
             let title = if self.ui.image_path.is_empty() {
                 String::new()
             } else {
-                self.ui.image_path.rsplit('/').next().unwrap_or(&self.ui.image_path).to_string()
+                self.ui
+                    .image_path
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&self.ui.image_path)
+                    .to_string()
             };
             p.text(panel.x + 14.0, panel.y + 12.0, &title, 14.0, TEXT, true);
             let rows: [(&str, &str); 4] = match &self.ui.hash_state {
@@ -3270,17 +4169,26 @@ impl App {
                     ("MD5:", h.md5.as_str()),
                     ("SHA1:", h.sha1.as_str()),
                     ("SHA256:", h.sha256.as_str()),
-                    ("SHA512:", if self.ui.extra_hashes || self.ui.sha512_show {
-                        h.sha512.as_str()
-                    } else {
-                        crate::locale::tr(lang, "Enable \"Extra hashes\" in the ⚙ Settings dialog, or press <Alt>-<H>.")
-                    }),
+                    (
+                        "SHA512:",
+                        if self.ui.extra_hashes || self.ui.sha512_show {
+                            h.sha512.as_str()
+                        } else {
+                            crate::locale::tr(lang, "Enable \"Extra hashes\" in the ⚙ Settings dialog, or press <Alt>-<H>.")
+                        },
+                    ),
                 ],
                 Some(HashState::Computing) => [
                     ("MD5:", crate::locale::tr(lang, "Computing…")),
                     ("SHA1:", crate::locale::tr(lang, "Computing…")),
                     ("SHA256:", crate::locale::tr(lang, "Computing…")),
-                    ("SHA512:", crate::locale::tr(lang, "Enable \"Extra hashes\" in the ⚙ Settings dialog, or press <Alt>-<H>.")),
+                    (
+                        "SHA512:",
+                        crate::locale::tr(
+                            lang,
+                            "Enable \"Extra hashes\" in the ⚙ Settings dialog, or press <Alt>-<H>.",
+                        ),
+                    ),
                 ],
                 Some(HashState::Failed(e)) => [
                     ("MD5:", crate::locale::tr(lang, "Failed")),
@@ -3289,21 +4197,41 @@ impl App {
                     ("SHA512:", e.as_str()),
                 ],
                 None => [
-                    ("MD5:", ""), ("SHA1:", ""), ("SHA256:", ""), ("SHA512:", ""),
+                    ("MD5:", ""),
+                    ("SHA1:", ""),
+                    ("SHA256:", ""),
+                    ("SHA512:", ""),
                 ],
             };
             let mut ry = panel.y + 46.0;
             for (label, value) in rows {
                 p.text(panel.x + 14.0, ry + 4.0, label, 13.0, TEXT, false);
-                let box_rect = Rect { x: panel.x + 80.0, y: ry, w: pw - 100.0, h: 28.0 };
+                let box_rect = Rect {
+                    x: panel.x + 80.0,
+                    y: ry,
+                    w: pw - 100.0,
+                    h: 28.0,
+                };
                 p.fill(box_rect, FIELD);
                 p.frame(box_rect, BORDER);
                 let mono: String = value.chars().take(64).collect();
                 p.text(box_rect.x + 6.0, box_rect.y + 7.0, &mono, 12.0, TEXT, false);
                 ry += 44.0;
             }
-            let ok = Rect { x: panel.x + panel.w - 100.0, y: panel.y + ph - 42.0, w: 86.0, h: 28.0 };
-            Self::draw_button(&mut p, ok, crate::locale::tr(lang, "OK"), true, self.mouse, true);
+            let ok = Rect {
+                x: panel.x + panel.w - 100.0,
+                y: panel.y + ph - 42.0,
+                w: 86.0,
+                h: 28.0,
+            };
+            Self::draw_button(
+                &mut p,
+                ok,
+                crate::locale::tr(lang, "OK"),
+                true,
+                self.mouse,
+                true,
+            );
             self.ui.widgets.push((ok, Widget::HashOk));
         }
 
@@ -3311,46 +4239,135 @@ impl App {
         if self.ui.wue_open {
             let pw = 520.0;
             let ph = 400.0;
-            let panel = Rect { x: (width - pw) / 2.0, y: (size.height as f32 - ph) / 2.0, w: pw, h: ph };
+            let panel = Rect {
+                x: (width - pw) / 2.0,
+                y: (size.height as f32 - ph) / 2.0,
+                w: pw,
+                h: ph,
+            };
             p.fill(panel, FIELD);
             p.frame(panel, ACCENT);
             // header band
-            let header = Rect { x: panel.x, y: panel.y, w: panel.w, h: 34.0 };
+            let header = Rect {
+                x: panel.x,
+                y: panel.y,
+                w: panel.w,
+                h: 34.0,
+            };
             p.fill(header, 0xDCEBF5);
-            p.fill(Rect { x: panel.x, y: panel.y + 34.0, w: panel.w, h: 1.0 }, BORDER);
-            p.text(panel.x + 14.0, panel.y + 9.0, crate::locale::tr(lang, "Windows User Experience"), 14.0, TEXT, true);
+            p.fill(
+                Rect {
+                    x: panel.x,
+                    y: panel.y + 34.0,
+                    w: panel.w,
+                    h: 1.0,
+                },
+                BORDER,
+            );
+            p.text(
+                panel.x + 14.0,
+                panel.y + 9.0,
+                crate::locale::tr(lang, "Windows User Experience"),
+                14.0,
+                TEXT,
+                true,
+            );
             // ? icon
             p.disc(panel.x + 28.0, panel.y + 70.0, 14.0, ACCENT);
             p.text(panel.x + 22.0, panel.y + 58.0, "?", 18.0, FIELD, true);
-            p.text(panel.x + 52.0, panel.y + 58.0, crate::locale::tr(lang, "Customize Windows installation?"), 14.0, TEXT, false);
+            p.text(
+                panel.x + 52.0,
+                panel.y + 58.0,
+                crate::locale::tr(lang, "Customize Windows installation?"),
+                14.0,
+                TEXT,
+                false,
+            );
             let wue = self.ui.wue.unwrap_or(engine::WueOptions {
-                bypass_tpm: true, no_online_account: true, disable_data_collection: true,
-                local_account: false, regional_same_as_user: false,
+                bypass_tpm: true,
+                no_online_account: true,
+                disable_data_collection: true,
+                local_account: false,
+                regional_same_as_user: false,
                 offline_internal_drives: true,
             });
             let checks = [
-                ("Remove requirement for 4GB+ RAM, Secure Boot and TPM 2.0", wue.bypass_tpm),
-                ("Remove requirement for an online Microsoft account", wue.no_online_account),
-                ("Disable data collection (Skip privacy questions)", wue.disable_data_collection),
-                ("Set a local account using the same name as this user's", wue.local_account),
+                (
+                    "Remove requirement for 4GB+ RAM, Secure Boot and TPM 2.0",
+                    wue.bypass_tpm,
+                ),
+                (
+                    "Remove requirement for an online Microsoft account",
+                    wue.no_online_account,
+                ),
+                (
+                    "Disable data collection (Skip privacy questions)",
+                    wue.disable_data_collection,
+                ),
+                (
+                    "Set a local account using the same name as this user's",
+                    wue.local_account,
+                ),
                 // Rufus 4.x msgid wording (was "using the same values")
-                ("Set regional options to the same values as this user's", wue.regional_same_as_user),
+                (
+                    "Set regional options to the same values as this user's",
+                    wue.regional_same_as_user,
+                ),
                 // Rufus MSG_332: offered for Windows To Go (SanPolicy 4)
-                ("Prevent Windows To Go from accessing internal disks", wue.offline_internal_drives),
+                (
+                    "Prevent Windows To Go from accessing internal disks",
+                    wue.offline_internal_drives,
+                ),
             ];
             let mut cy = panel.y + 96.0;
             for (i, (text, checked)) in checks.into_iter().enumerate() {
-                Self::draw_checkbox(&mut p, panel.x + 30.0, cy, crate::locale::tr(lang, text), checked, true);
+                Self::draw_checkbox(
+                    &mut p,
+                    panel.x + 30.0,
+                    cy,
+                    crate::locale::tr(lang, text),
+                    checked,
+                    true,
+                );
                 self.ui.widgets.push((
-                    Rect { x: panel.x + 30.0, y: cy - 2.0, w: panel.w - 60.0, h: 20.0 },
+                    Rect {
+                        x: panel.x + 30.0,
+                        y: cy - 2.0,
+                        w: panel.w - 60.0,
+                        h: 20.0,
+                    },
                     Widget::WueChk(i),
                 ));
                 cy += 24.0;
             }
-            let ok = Rect { x: panel.x + panel.w - 230.0, y: panel.y + ph - 46.0, w: 100.0, h: 30.0 };
-            let cancel = Rect { x: panel.x + panel.w - 118.0, y: panel.y + ph - 46.0, w: 104.0, h: 30.0 };
-            Self::draw_button(&mut p, ok, crate::locale::tr(lang, "OK"), true, self.mouse, true);
-            Self::draw_button(&mut p, cancel, crate::locale::tr(lang, "Cancel"), true, self.mouse, false);
+            let ok = Rect {
+                x: panel.x + panel.w - 230.0,
+                y: panel.y + ph - 46.0,
+                w: 100.0,
+                h: 30.0,
+            };
+            let cancel = Rect {
+                x: panel.x + panel.w - 118.0,
+                y: panel.y + ph - 46.0,
+                w: 104.0,
+                h: 30.0,
+            };
+            Self::draw_button(
+                &mut p,
+                ok,
+                crate::locale::tr(lang, "OK"),
+                true,
+                self.mouse,
+                true,
+            );
+            Self::draw_button(
+                &mut p,
+                cancel,
+                crate::locale::tr(lang, "Cancel"),
+                true,
+                self.mouse,
+                false,
+            );
             self.ui.widgets.push((ok, Widget::WueOk));
             self.ui.widgets.push((cancel, Widget::WueCancel));
         }
@@ -3360,38 +4377,107 @@ impl App {
             let pw = 460.0;
             let rows = self.ui.wim_pick.len().min(8) as f32;
             let ph = 210.0 + rows * DD_ITEM_H;
-            let panel = Rect { x: (width - pw) / 2.0, y: (size.height as f32 - ph) / 2.0, w: pw, h: ph };
+            let panel = Rect {
+                x: (width - pw) / 2.0,
+                y: (size.height as f32 - ph) / 2.0,
+                w: pw,
+                h: ph,
+            };
             p.fill(panel, FIELD);
             p.frame(panel, ACCENT);
             // header band
-            let header = Rect { x: panel.x, y: panel.y, w: panel.w, h: 34.0 };
+            let header = Rect {
+                x: panel.x,
+                y: panel.y,
+                w: panel.w,
+                h: 34.0,
+            };
             p.fill(header, 0xDCEBF5);
-            p.fill(Rect { x: panel.x, y: panel.y + 34.0, w: panel.w, h: 1.0 }, BORDER);
-            p.text(panel.x + 14.0, panel.y + 9.0, crate::locale::tr(lang, "Version selection"), 14.0, TEXT, true);
-            p.text(panel.x + 14.0, panel.y + 46.0,
-                crate::locale::tr(lang, "Please select the version of Windows you want to install:"), 13.0, TEXT, false);
+            p.fill(
+                Rect {
+                    x: panel.x,
+                    y: panel.y + 34.0,
+                    w: panel.w,
+                    h: 1.0,
+                },
+                BORDER,
+            );
+            p.text(
+                panel.x + 14.0,
+                panel.y + 9.0,
+                crate::locale::tr(lang, "Version selection"),
+                14.0,
+                TEXT,
+                true,
+            );
+            p.text(
+                panel.x + 14.0,
+                panel.y + 46.0,
+                crate::locale::tr(
+                    lang,
+                    "Please select the version of Windows you want to install:",
+                ),
+                13.0,
+                TEXT,
+                false,
+            );
             // edition list
-            let list = Rect { x: panel.x + 14.0, y: panel.y + 72.0, w: pw - 28.0, h: rows * DD_ITEM_H + 4.0 };
+            let list = Rect {
+                x: panel.x + 14.0,
+                y: panel.y + 72.0,
+                w: pw - 28.0,
+                h: rows * DD_ITEM_H + 4.0,
+            };
             p.fill(list, FIELD);
             p.frame(list, BORDER);
             for (i, img) in self.ui.wim_pick.iter().take(8).enumerate() {
                 let (idx, name) = (img.index, img.name.as_str());
                 let iy = list.y + 2.0 + i as f32 * DD_ITEM_H;
-                let row = Rect { x: list.x + 1.0, y: iy, w: list.w - 2.0, h: DD_ITEM_H };
+                let row = Rect {
+                    x: list.x + 1.0,
+                    y: iy,
+                    w: list.w - 2.0,
+                    h: DD_ITEM_H,
+                };
                 let hot = row.contains(self.mouse.0, self.mouse.1);
                 let sel = i == self.ui.wim_pick_sel;
                 if hot || sel {
                     p.fill(row, if sel { 0xCCE8FF } else { 0xE8F2FC });
                 }
                 let color = if sel { ACCENT } else { TEXT };
-                let row_text = crate::locale::trf(lang, "{0} (image {1})", &[name, &idx.to_string()]);
+                let row_text =
+                    crate::locale::trf(lang, "{0} (image {1})", &[name, &idx.to_string()]);
                 p.text(row.x + 6.0, iy + 3.0, &row_text, 12.0, color, false);
                 self.ui.widgets.push((row, Widget::WimPickRow(i)));
             }
-            let ok = Rect { x: panel.x + panel.w - 210.0, y: panel.y + ph - 46.0, w: 90.0, h: 30.0 };
-            let cancel = Rect { x: panel.x + panel.w - 108.0, y: panel.y + ph - 46.0, w: 94.0, h: 30.0 };
-            Self::draw_button(&mut p, ok, crate::locale::tr(lang, "OK"), true, self.mouse, true);
-            Self::draw_button(&mut p, cancel, crate::locale::tr(lang, "Cancel"), true, self.mouse, false);
+            let ok = Rect {
+                x: panel.x + panel.w - 210.0,
+                y: panel.y + ph - 46.0,
+                w: 90.0,
+                h: 30.0,
+            };
+            let cancel = Rect {
+                x: panel.x + panel.w - 108.0,
+                y: panel.y + ph - 46.0,
+                w: 94.0,
+                h: 30.0,
+            };
+            Self::draw_button(
+                &mut p,
+                ok,
+                crate::locale::tr(lang, "OK"),
+                true,
+                self.mouse,
+                true,
+            );
+            Self::draw_button(
+                &mut p,
+                cancel,
+                crate::locale::tr(lang, "Cancel"),
+                true,
+                self.mouse,
+                false,
+            );
             self.ui.widgets.push((ok, Widget::WimPickOk));
             self.ui.widgets.push((cancel, Widget::WimPickCancel));
         }
@@ -3400,36 +4486,73 @@ impl App {
         if let Some(b) = &self.ui.browser {
             let pw = 520.0;
             let ph = 440.0;
-            let panel = Rect { x: (width - pw) / 2.0, y: (size.height as f32 - ph) / 2.0, w: pw, h: ph };
+            let panel = Rect {
+                x: (width - pw) / 2.0,
+                y: (size.height as f32 - ph) / 2.0,
+                w: pw,
+                h: ph,
+            };
             p.fill(panel, FIELD);
             p.frame(panel, ACCENT);
-            p.text(panel.x + 12.0, panel.y + 10.0, crate::locale::tr(lang, "Select an image file"), 14.0, TEXT, true);
+            p.text(
+                panel.x + 12.0,
+                panel.y + 10.0,
+                crate::locale::tr(lang, "Select an image file"),
+                14.0,
+                TEXT,
+                true,
+            );
             // current directory, truncated from the left if long
             let dir_text = b.dir.to_string_lossy().to_string();
             let dt: String = if dir_text.chars().count() > 62 {
-                format!("…{}", dir_text.chars().skip(dir_text.chars().count() - 62).collect::<String>())
+                format!(
+                    "…{}",
+                    dir_text
+                        .chars()
+                        .skip(dir_text.chars().count() - 62)
+                        .collect::<String>()
+                )
             } else {
                 dir_text
             };
             p.text(panel.x + 12.0, panel.y + 34.0, &dt, 11.0, 0x505050, false);
-            let list = Rect { x: panel.x + 10.0, y: panel.y + 52.0, w: pw - 20.0, h: ph - 100.0 };
+            let list = Rect {
+                x: panel.x + 10.0,
+                y: panel.y + 52.0,
+                w: pw - 20.0,
+                h: ph - 100.0,
+            };
             p.fill(list, 0xFAFAFA);
             p.frame(list, BORDER);
             let row_h = 18.0;
             let visible = ((list.h - 6.0) / row_h) as usize;
             for i in 0..visible {
                 let ry = list.y + 4.0 + i as f32 * row_h;
-                let row = Rect { x: list.x + 2.0, y: ry, w: list.w - 4.0, h: row_h };
+                let row = Rect {
+                    x: list.x + 2.0,
+                    y: ry,
+                    w: list.w - 4.0,
+                    h: row_h,
+                };
                 if i == 0 {
                     let hot = row.contains(self.mouse.0, self.mouse.1);
                     if hot {
                         p.fill(row, 0xCCE8FF);
                     }
-                    p.text(row.x + 6.0, ry + 2.0, crate::locale::tr(lang, ".. (parent directory)"), 12.0, ACCENT, false);
+                    p.text(
+                        row.x + 6.0,
+                        ry + 2.0,
+                        crate::locale::tr(lang, ".. (parent directory)"),
+                        12.0,
+                        ACCENT,
+                        false,
+                    );
                     self.ui.widgets.push((row, Widget::BrowserRow(0)));
                 } else {
                     let ei = b.top + i - 1;
-                    let Some((name, is_dir, size)) = b.entries.get(ei) else { break };
+                    let Some((name, is_dir, size)) = b.entries.get(ei) else {
+                        break;
+                    };
                     let hot = row.contains(self.mouse.0, self.mouse.1);
                     if hot {
                         p.fill(row, 0xCCE8FF);
@@ -3453,13 +4576,26 @@ impl App {
                     }
                 }
             }
-            let cancel = Rect { x: panel.x + panel.w - 100.0, y: panel.y + ph - 38.0, w: 86.0, h: 28.0 };
-            Self::draw_button(&mut p, cancel, crate::locale::tr(lang, "Cancel"), true, self.mouse, false);
+            let cancel = Rect {
+                x: panel.x + panel.w - 100.0,
+                y: panel.y + ph - 38.0,
+                w: 86.0,
+                h: 28.0,
+            };
+            Self::draw_button(
+                &mut p,
+                cancel,
+                crate::locale::tr(lang, "Cancel"),
+                true,
+                self.mouse,
+                false,
+            );
             self.ui.widgets.push((cancel, Widget::BrowserCancel));
         }
 
         // --- Rufus "⬇ DOWNLOAD" dialog (official Windows/Linux ISOs) ---
-        let dl_rects = download::render_dl(&mut self.ui, &mut p, self.mouse, width, size.height as f32);
+        let dl_rects =
+            download::render_dl(&mut self.ui, &mut p, self.mouse, width, size.height as f32);
         for (dd, r) in dl_rects {
             dd_rects.insert(dd, r);
         }
@@ -3480,13 +4616,24 @@ impl App {
                     } else {
                         base_rect.y + COMBO_H
                     };
-                    let list = Rect { x: base_rect.x, y: list_y, w: base_rect.w.max(170.0), h: list_h };
+                    let list = Rect {
+                        x: base_rect.x,
+                        y: list_y,
+                        w: base_rect.w.max(170.0),
+                        h: list_h,
+                    };
                     p.fill(list, FIELD);
                     p.frame(list, ACCENT);
-                    let hot_idx = ((self.mouse.1 - list.y - 2.0) / DD_ITEM_H).floor() as i64 + start as i64;
+                    let hot_idx =
+                        ((self.mouse.1 - list.y - 2.0) / DD_ITEM_H).floor() as i64 + start as i64;
                     for (i, item) in items.iter().enumerate().skip(start).take(visible) {
                         let iy = list.y + 2.0 + (i - start) as f32 * DD_ITEM_H;
-                        let row = Rect { x: list.x + 1.0, y: iy, w: list.w - 2.0, h: DD_ITEM_H };
+                        let row = Rect {
+                            x: list.x + 1.0,
+                            y: iy,
+                            w: list.w - 2.0,
+                            h: DD_ITEM_H,
+                        };
                         if hot_idx == i as i64 {
                             p.fill(row, 0xCCE8FF);
                         }
@@ -3502,7 +4649,14 @@ impl App {
         buffer.present().ok();
     }
 
-    fn draw_combo(p: &mut Painter, r: Rect, text: &str, enabled: bool, open: bool, mouse: (f32, f32)) {
+    fn draw_combo(
+        p: &mut Painter,
+        r: Rect,
+        text: &str,
+        enabled: bool,
+        open: bool,
+        mouse: (f32, f32),
+    ) {
         let hot = enabled && r.contains(mouse.0, mouse.1);
         p.fill(r, if enabled { FIELD } else { 0xF4F4F4 });
         let border = if !enabled {
@@ -3520,7 +4674,15 @@ impl App {
         let ay = r.y + r.h / 2.0;
         for i in 0..5 {
             let w = 9 - i * 2;
-            p.fill(Rect { x: ax - (w as f32) / 2.0, y: ay - 3.0 + i as f32, w: w as f32, h: 1.0 }, if enabled { 0x505050 } else { BORDER_DIS });
+            p.fill(
+                Rect {
+                    x: ax - (w as f32) / 2.0,
+                    y: ay - 3.0 + i as f32,
+                    w: w as f32,
+                    h: 1.0,
+                },
+                if enabled { 0x505050 } else { BORDER_DIS },
+            );
         }
     }
 
@@ -3536,24 +4698,52 @@ impl App {
         p.text(r.x + 6.0, r.y + 5.0, text, 12.0, tcolor, false);
         if focused && enabled {
             let tw = p.text_w(text, 12.0, false);
-            p.fill(Rect { x: r.x + 6.0 + tw + 1.0, y: r.y + 4.0, w: 1.5, h: 16.0 }, TEXT);
+            p.fill(
+                Rect {
+                    x: r.x + 6.0 + tw + 1.0,
+                    y: r.y + 4.0,
+                    w: 1.5,
+                    h: 16.0,
+                },
+                TEXT,
+            );
         }
     }
 
     fn draw_checkbox(p: &mut Painter, x: f32, y: f32, text: &str, checked: bool, enabled: bool) {
-        let box_rect = Rect { x, y: y + 1.0, w: 15.0, h: 15.0 };
+        let box_rect = Rect {
+            x,
+            y: y + 1.0,
+            w: 15.0,
+            h: 15.0,
+        };
         p.fill(box_rect, if enabled { FIELD } else { 0xF4F4F4 });
         p.frame(box_rect, if enabled { BORDER } else { BORDER_DIS });
         if checked {
             // Win32-style check mark (filled blue box + white check)
-            p.fill(Rect { x: x + 1.0, y: y + 2.0, w: 13.0, h: 13.0 }, ACCENT);
+            p.fill(
+                Rect {
+                    x: x + 1.0,
+                    y: y + 2.0,
+                    w: 13.0,
+                    h: 13.0,
+                },
+                ACCENT,
+            );
             p.text(x + 2.0, y - 1.0, "\u{2713}", 12.0, FIELD, true);
         }
         let tcolor = if enabled { TEXT } else { TEXT_DIS };
         p.text(x + 22.0, y, text, 13.0, tcolor, false);
     }
 
-    fn draw_button(p: &mut Painter, r: Rect, label: &str, enabled: bool, mouse: (f32, f32), default_border: bool) {
+    fn draw_button(
+        p: &mut Painter,
+        r: Rect,
+        label: &str,
+        enabled: bool,
+        mouse: (f32, f32),
+        default_border: bool,
+    ) {
         let hot = enabled && r.contains(mouse.0, mouse.1);
         let (bg, border, tc) = if !enabled {
             (0xECECEC, BORDER_DIS, TEXT_DIS)
@@ -3568,10 +4758,25 @@ impl App {
         p.text(r.x + (r.w - tw) / 2.0, r.y + 9.0, label, 13.0, tc, false);
     }
 
-    fn draw_icon_button(p: &mut Painter, r: Rect, kind: IconKind, enabled: bool, mouse: (f32, f32)) {
+    fn draw_icon_button(
+        p: &mut Painter,
+        r: Rect,
+        kind: IconKind,
+        enabled: bool,
+        mouse: (f32, f32),
+    ) {
         let hot = enabled && r.contains(mouse.0, mouse.1);
         p.fill(r, if hot { BTN_HOVER } else { BG });
-        p.frame(r, if hot { BTN_HOVER_BORDER } else if enabled { BORDER } else { BORDER_DIS });
+        p.frame(
+            r,
+            if hot {
+                BTN_HOVER_BORDER
+            } else if enabled {
+                BORDER
+            } else {
+                BORDER_DIS
+            },
+        );
         let c = if enabled { ACCENT } else { TEXT_DIS };
         let cx = r.x + r.w / 2.0;
         let cy = r.y + r.h / 2.0;
@@ -3580,13 +4785,45 @@ impl App {
                 // circle + meridian lines
                 p.disc(cx, cy, 8.0, c);
                 p.disc(cx, cy, 6.0, BG);
-                p.fill(Rect { x: cx - 7.0, y: cy, w: 14.0, h: 1.0 }, c);
-                p.fill(Rect { x: cx - 3.0, y: cy - 7.0, w: 1.0, h: 14.0 }, c);
+                p.fill(
+                    Rect {
+                        x: cx - 7.0,
+                        y: cy,
+                        w: 14.0,
+                        h: 1.0,
+                    },
+                    c,
+                );
+                p.fill(
+                    Rect {
+                        x: cx - 3.0,
+                        y: cy - 7.0,
+                        w: 1.0,
+                        h: 14.0,
+                    },
+                    c,
+                );
             }
             IconKind::Disk => {
                 // hard-drive glyph: box + activity dot
-                p.frame(Rect { x: cx - 9.0, y: cy - 6.0, w: 18.0, h: 12.0 }, c);
-                p.fill(Rect { x: cx - 6.0, y: cy - 1.0, w: 8.0, h: 2.0 }, c);
+                p.frame(
+                    Rect {
+                        x: cx - 9.0,
+                        y: cy - 6.0,
+                        w: 18.0,
+                        h: 12.0,
+                    },
+                    c,
+                );
+                p.fill(
+                    Rect {
+                        x: cx - 6.0,
+                        y: cy - 1.0,
+                        w: 8.0,
+                        h: 2.0,
+                    },
+                    c,
+                );
                 p.disc(cx + 6.0, cy, 1.5, c);
             }
             IconKind::Info => {
@@ -3596,14 +4833,46 @@ impl App {
                 // slider-style settings glyph
                 for (i, kx) in [0.0, 5.0, 2.0].into_iter().enumerate() {
                     let ly = cy - 6.0 + i as f32 * 6.0;
-                    p.fill(Rect { x: cx - 8.0, y: ly, w: 16.0, h: 1.5 }, c);
-                    p.fill(Rect { x: cx - 8.0 + kx, y: ly - 2.5, w: 4.0, h: 6.0 }, c);
+                    p.fill(
+                        Rect {
+                            x: cx - 8.0,
+                            y: ly,
+                            w: 16.0,
+                            h: 1.5,
+                        },
+                        c,
+                    );
+                    p.fill(
+                        Rect {
+                            x: cx - 8.0 + kx,
+                            y: ly - 2.5,
+                            w: 4.0,
+                            h: 6.0,
+                        },
+                        c,
+                    );
                 }
             }
             IconKind::Log => {
-                p.frame(Rect { x: cx - 7.0, y: cy - 8.0, w: 14.0, h: 16.0 }, c);
+                p.frame(
+                    Rect {
+                        x: cx - 7.0,
+                        y: cy - 8.0,
+                        w: 14.0,
+                        h: 16.0,
+                    },
+                    c,
+                );
                 for i in 0..3 {
-                    p.fill(Rect { x: cx - 5.0, y: cy - 5.0 + i as f32 * 4.0, w: 10.0, h: 1.0 }, c);
+                    p.fill(
+                        Rect {
+                            x: cx - 5.0,
+                            y: cy - 5.0 + i as f32 * 4.0,
+                            w: 10.0,
+                            h: 1.0,
+                        },
+                        c,
+                    );
                 }
             }
         }
@@ -3627,7 +4896,12 @@ mod tests {
     fn text_layout_handles_latin_shaped_and_fallback_scripts() {
         let Some(fonts) = load_fonts() else { return }; // no system fonts: skip
         let mut empty: [u32; 0] = [];
-        let p = Painter { buf: &mut empty, w: 0, h: 0, fonts };
+        let p = Painter {
+            buf: &mut empty,
+            w: 0,
+            h: 0,
+            fonts,
+        };
         // plain Latin: one glyph per char, positive advance
         let (glyphs, w) = p.layout("START", 13.0, false);
         assert_eq!(glyphs.len(), 5);
@@ -3692,7 +4966,11 @@ mod tests {
         std::fs::write(subdir.join("distro.iso"), b"x").unwrap();
         std::fs::write(base.join("readme.txt"), b"x").unwrap();
 
-        let mut b = FileBrowser { dir: base.clone(), entries: Vec::new(), top: 0 };
+        let mut b = FileBrowser {
+            dir: base.clone(),
+            entries: Vec::new(),
+            top: 0,
+        };
         b.reload();
         // directories sort first, ".." is row 0
         assert_eq!(b.entries[0].0, "isos");
@@ -3704,10 +4982,22 @@ mod tests {
         let picked = b.pick(1).expect("distro.iso should be pickable");
         assert!(picked.ends_with("distro.iso"));
         // non-image files are not pickable
-        let mut b2 = FileBrowser { dir: base.clone(), entries: Vec::new(), top: 0 };
+        let mut b2 = FileBrowser {
+            dir: base.clone(),
+            entries: Vec::new(),
+            top: 0,
+        };
         b2.reload();
-        let txt_row = b2.entries.iter().position(|(n, _d, _)| n == "readme.txt").unwrap() + 1;
-        assert!(b2.pick(txt_row).is_none(), "readme.txt must not be pickable");
+        let txt_row = b2
+            .entries
+            .iter()
+            .position(|(n, _d, _)| n == "readme.txt")
+            .unwrap()
+            + 1;
+        assert!(
+            b2.pick(txt_row).is_none(),
+            "readme.txt must not be pickable"
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 }

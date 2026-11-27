@@ -39,11 +39,7 @@ const GRUB_FIRST_SEG: u16 = 0x820;
 /// here). `part_start_lba` converts them to the disk-absolute LBAs the
 /// blocklist expects. Entries are written downward from 0x1F4, each
 /// destination segment continuing where the previous one ended.
-pub fn patch_core_blocklists(
-    core: &mut [u8],
-    lbas: &[u64],
-    part_start_lba: u64,
-) -> Result<()> {
+pub fn patch_core_blocklists(core: &mut [u8], lbas: &[u64], part_start_lba: u64) -> Result<()> {
     if !core.len().is_multiple_of(512) {
         bail!("core.img length {} is not sector-aligned", core.len());
     }
@@ -97,8 +93,7 @@ pub fn patch_grub_boot(boot: &mut [u8], formatted_vbr: &[u8], first_abs_lba: u64
     }
     boot[GRUB_BPB_START..GRUB_BPB_END]
         .copy_from_slice(&formatted_vbr[GRUB_BPB_START..GRUB_BPB_END]);
-    boot[GRUB_KERNEL_SECTOR..GRUB_KERNEL_SECTOR + 8]
-        .copy_from_slice(&first_abs_lba.to_le_bytes());
+    boot[GRUB_KERNEL_SECTOR..GRUB_KERNEL_SECTOR + 8].copy_from_slice(&first_abs_lba.to_le_bytes());
     boot[GRUB_BOOT_DRIVE] = 0xFF;
     Ok(())
 }
@@ -163,13 +158,12 @@ pub fn build_ldlinux_file(image: &[u8]) -> Vec<u8> {
 /// including sector 0 and the two trailing ADV sectors); `raw_image_len` is
 /// the unpadded loader image length (the checksum domain, like the upstream
 /// installer). Returns the .bss patch offsets for [`assemble_syslinux_vbr`].
-pub fn patch_ldlinux(
-    file: &mut [u8],
-    raw_image_len: usize,
-    lbas: &[u64],
-) -> Result<LdlinuxPatch> {
+pub fn patch_ldlinux(file: &mut [u8], raw_image_len: usize, lbas: &[u64]) -> Result<LdlinuxPatch> {
     if !file.len().is_multiple_of(512) || file.len() < 3 * 512 {
-        bail!("ldlinux.sys length {} is not a sane sector count", file.len());
+        bail!(
+            "ldlinux.sys length {} is not a sane sector count",
+            file.len()
+        );
     }
     let nsect = file.len() / 512;
     if lbas.len() != nsect {
@@ -182,8 +176,9 @@ pub fn patch_ldlinux(
     // all field offsets below are relative to the magic dword
     let pa = (0..512usize)
         .step_by(4)
-        .find(|&i| u32::from_le_bytes([file[i], file[i + 1], file[i + 2], file[i + 3]])
-            == LDLINUX_MAGIC)
+        .find(|&i| {
+            u32::from_le_bytes([file[i], file[i + 1], file[i + 2], file[i + 3]]) == LDLINUX_MAGIC
+        })
         .ok_or_else(|| anyhow::anyhow!("ldlinux.sys: patch area magic not found"))?;
     let epa_off =
         u16::from_le_bytes([file[pa + PA_EPA_OFFSET], file[pa + PA_EPA_OFFSET + 1]]) as usize;
@@ -256,7 +251,10 @@ pub fn patch_ldlinux(
     }
     file[cs..cs + 4].copy_from_slice(&csum.to_le_bytes());
 
-    Ok(LdlinuxPatch { sect1ptr0, sect1ptr1 })
+    Ok(LdlinuxPatch {
+        sect1ptr0,
+        sect1ptr1,
+    })
 }
 
 /// Assemble the syslinux VBR from the .bss template + the formatted volume's
@@ -279,9 +277,9 @@ pub fn assemble_syslinux_vbr(
     out[11..90].copy_from_slice(&formatted_vbr[11..90]); // real BPB
     out[90..510].copy_from_slice(&bss[90..510]); // loader code
     out[0x1C..0x20].copy_from_slice(&part_start_lba.to_le_bytes()); // hidden
-    out[sect1ptr0..sect1ptr0 + 4].copy_from_slice(&((first_lba & 0xFFFF_FFFF) as u32).to_le_bytes());
-    out[sect1ptr1..sect1ptr1 + 4]
-        .copy_from_slice(&((first_lba >> 32) as u32).to_le_bytes());
+    out[sect1ptr0..sect1ptr0 + 4]
+        .copy_from_slice(&((first_lba & 0xFFFF_FFFF) as u32).to_le_bytes());
+    out[sect1ptr1..sect1ptr1 + 4].copy_from_slice(&((first_lba >> 32) as u32).to_le_bytes());
     out[510..512].copy_from_slice(&bss[510..512]); // 0x55AA
     Ok(out)
 }
@@ -365,7 +363,10 @@ mod tests {
         vbr[510..512].copy_from_slice(&[0x55, 0xAA]);
         patch_grub_boot(&mut boot, &vbr, 2048 + 500).unwrap();
         assert_eq!(&boot[3..0x5A], &vbr[3..0x5A]);
-        assert_eq!(u64::from_le_bytes(boot[0x5C..0x64].try_into().unwrap()), 2548);
+        assert_eq!(
+            u64::from_le_bytes(boot[0x5C..0x64].try_into().unwrap()),
+            2548
+        );
         assert_eq!(boot[0x64], 0xFF);
         // untouched boot.img fields
         assert_eq!(&boot[0x5A..0x5C], &[0x00, 0x80]); // kernel_address
@@ -385,14 +386,20 @@ mod tests {
     fn blank_adv_structure() {
         let adv = blank_adv();
         for half in adv.chunks_exact(512) {
-            assert_eq!(u32::from_le_bytes(half[0..4].try_into().unwrap()), 0x5A2D_2FA5);
+            assert_eq!(
+                u32::from_le_bytes(half[0..4].try_into().unwrap()),
+                0x5A2D_2FA5
+            );
             // checksum balance: dword[4] + sum(dwords 8..508) == 0xA3041767
             let mut sum = u32::from_le_bytes(half[4..8].try_into().unwrap());
             for d in half[8..508].chunks_exact(4) {
                 sum = sum.wrapping_add(u32::from_le_bytes(d.try_into().unwrap()));
             }
             assert_eq!(sum, 0xA304_1767);
-            assert_eq!(u32::from_le_bytes(half[508..512].try_into().unwrap()), 0xDD28_BF64);
+            assert_eq!(
+                u32::from_le_bytes(half[508..512].try_into().unwrap()),
+                0xDD28_BF64
+            );
         }
     }
 
@@ -403,15 +410,24 @@ mod tests {
         assert_eq!(f.len(), img_sectors * 512 + 1024);
         assert_eq!(&f[..ldlinux_v6().len()], ldlinux_v6());
         // padding is zero and the ADV halves are identical
-        assert!(f[ldlinux_v6().len()..img_sectors * 512].iter().all(|&b| b == 0));
-        assert_eq!(f[img_sectors * 512..img_sectors * 512 + 512], f[img_sectors * 512 + 512..]);
+        assert!(f[ldlinux_v6().len()..img_sectors * 512]
+            .iter()
+            .all(|&b| b == 0));
+        assert_eq!(
+            f[img_sectors * 512..img_sectors * 512 + 512],
+            f[img_sectors * 512 + 512..]
+        );
     }
 
     /// ext-patch-area offsets read out of a patched ldlinux.sys buffer.
     fn epa_fields(file: &[u8]) -> (usize, usize, usize) {
-        let epa_off =
-            u16::from_le_bytes(file[0x18 + PA_EPA_OFFSET..0x18 + PA_EPA_OFFSET + 2].try_into().unwrap()) as usize;
-        let u16_at = |off: usize| u16::from_le_bytes(file[off..off + 2].try_into().unwrap()) as usize;
+        let epa_off = u16::from_le_bytes(
+            file[0x18 + PA_EPA_OFFSET..0x18 + PA_EPA_OFFSET + 2]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let u16_at =
+            |off: usize| u16::from_le_bytes(file[off..off + 2].try_into().unwrap()) as usize;
         (
             u16_at(epa_off + EPA_ADV_PTR),
             u16_at(epa_off + EPA_SECPTR),
@@ -446,9 +462,30 @@ mod tests {
         let patch = patch_ldlinux(&mut file, raw_len, &lbas).unwrap();
 
         // patch-area counters (magic dword at 0x18)
-        assert_eq!(u16::from_le_bytes(file[0x18 + PA_DATA_SECTORS..0x18 + PA_DATA_SECTORS + 2].try_into().unwrap()), 134);
-        assert_eq!(u16::from_le_bytes(file[0x18 + PA_ADV_SECTORS..0x18 + PA_ADV_SECTORS + 2].try_into().unwrap()), 2);
-        assert_eq!(u32::from_le_bytes(file[0x18 + PA_DWORDS..0x18 + PA_DWORDS + 4].try_into().unwrap()), (raw_len >> 2) as u32);
+        assert_eq!(
+            u16::from_le_bytes(
+                file[0x18 + PA_DATA_SECTORS..0x18 + PA_DATA_SECTORS + 2]
+                    .try_into()
+                    .unwrap()
+            ),
+            134
+        );
+        assert_eq!(
+            u16::from_le_bytes(
+                file[0x18 + PA_ADV_SECTORS..0x18 + PA_ADV_SECTORS + 2]
+                    .try_into()
+                    .unwrap()
+            ),
+            2
+        );
+        assert_eq!(
+            u32::from_le_bytes(
+                file[0x18 + PA_DWORDS..0x18 + PA_DWORDS + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            (raw_len >> 2) as u32
+        );
 
         // extents: base for sector 1 is 0x8200, so the first run stops at
         // the 64 KiB boundary (63 sectors); the rest is contiguous
@@ -479,7 +516,11 @@ mod tests {
 
         // checksum matches an independent recomputation
         assert_eq!(
-            u32::from_le_bytes(file[0x18 + PA_CHECKSUM..0x18 + PA_CHECKSUM + 4].try_into().unwrap()),
+            u32::from_le_bytes(
+                file[0x18 + PA_CHECKSUM..0x18 + PA_CHECKSUM + 4]
+                    .try_into()
+                    .unwrap()
+            ),
             recompute_checksum(&file, raw_len)
         );
 
@@ -523,9 +564,20 @@ mod tests {
         assert_eq!(rd_ext(3), (3160, 4));
         assert_eq!(rd_ext(4), (3164, 8));
         assert_eq!(rd_ext(5), (0, 0)); // terminator
-        assert_eq!(u32::from_le_bytes(file[0x18 + PA_DWORDS..0x18 + PA_DWORDS + 4].try_into().unwrap()), 9122);
         assert_eq!(
-            u32::from_le_bytes(file[0x18 + PA_CHECKSUM..0x18 + PA_CHECKSUM + 4].try_into().unwrap()),
+            u32::from_le_bytes(
+                file[0x18 + PA_DWORDS..0x18 + PA_DWORDS + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            9122
+        );
+        assert_eq!(
+            u32::from_le_bytes(
+                file[0x18 + PA_CHECKSUM..0x18 + PA_CHECKSUM + 4]
+                    .try_into()
+                    .unwrap()
+            ),
             recompute_checksum(&file, raw_len)
         );
     }
@@ -545,24 +597,36 @@ mod tests {
         assert_eq!(&out[90..0x11A], &bss[90..0x11A]);
         assert_eq!(&out[0x11E..0x120], &bss[0x11E..0x120]);
         assert_eq!(&out[0x124..510], &bss[0x124..510]);
-        assert_eq!(u32::from_le_bytes(out[0x1C..0x20].try_into().unwrap()), 2048);
-        assert_eq!(u32::from_le_bytes(out[0x11A..0x11E].try_into().unwrap()), 12345);
+        assert_eq!(
+            u32::from_le_bytes(out[0x1C..0x20].try_into().unwrap()),
+            2048
+        );
+        assert_eq!(
+            u32::from_le_bytes(out[0x11A..0x11E].try_into().unwrap()),
+            12345
+        );
         assert_eq!(u32::from_le_bytes(out[0x120..0x124].try_into().unwrap()), 0);
         assert_eq!(&out[510..512], &[0x55, 0xAA]);
         // the placeholders from the pristine bss are gone
-        assert_ne!(u32::from_le_bytes(out[0x11A..0x11E].try_into().unwrap()), 0xDEAD_BEEF);
+        assert_ne!(
+            u32::from_le_bytes(out[0x11A..0x11E].try_into().unwrap()),
+            0xDEAD_BEEF
+        );
     }
 
     /// The v4/v6 .bss templates only differ in the instance constant — one
     /// patcher serves both, so the first-sector pointer offsets must match.
     #[test]
     fn bss_templates_share_patch_offsets() {
-        for bss in [
-            crate::engine::LDLINUX_V6_BSS,
-            crate::engine::LDLINUX_V4_BSS,
-        ] {
-            assert_eq!(u32::from_le_bytes(bss[0x11A..0x11E].try_into().unwrap()), 0xDEAD_BEEF);
-            assert_eq!(u32::from_le_bytes(bss[0x120..0x124].try_into().unwrap()), 0xFEED_FACE);
+        for bss in [crate::engine::LDLINUX_V6_BSS, crate::engine::LDLINUX_V4_BSS] {
+            assert_eq!(
+                u32::from_le_bytes(bss[0x11A..0x11E].try_into().unwrap()),
+                0xDEAD_BEEF
+            );
+            assert_eq!(
+                u32::from_le_bytes(bss[0x120..0x124].try_into().unwrap()),
+                0xFEED_FACE
+            );
         }
     }
 }

@@ -62,7 +62,11 @@ pub enum FsKind {
 }
 impl FsKind {
     pub fn name(&self) -> &'static str {
-        match self { FsKind::Fat32 => "FAT32", FsKind::Ntfs => "NTFS", FsKind::Exfat => "exFAT" }
+        match self {
+            FsKind::Fat32 => "FAT32",
+            FsKind::Ntfs => "NTFS",
+            FsKind::Exfat => "exFAT",
+        }
     }
 }
 
@@ -163,8 +167,7 @@ pub fn sanitize_fat_label(label: &str) -> String {
             break;
         }
         let c = c.to_ascii_uppercase();
-        let ok = c.is_ascii()
-            && (c.is_ascii_alphanumeric() || FAT_ALLOWED.contains(c));
+        let ok = c.is_ascii() && (c.is_ascii_alphanumeric() || FAT_ALLOWED.contains(c));
         if ok {
             out.push(c);
         } else {
@@ -179,9 +182,9 @@ pub struct Options {
     pub fs: FsKind,
     pub scheme: PartitionScheme,
     pub fs_label: String,
-    pub quick: bool,          // skip bad-block scan
-    pub verify: bool,         // verify after write (sha256 compare pass)
-    pub efi_only: bool,       // don't bother with BIOS boot
+    pub quick: bool,    // skip bad-block scan
+    pub verify: bool,   // verify after write (sha256 compare pass)
+    pub efi_only: bool, // don't bother with BIOS boot
     /// casper-rw ext4 persistence partition size in MiB (0 = disabled)
     pub persistence_mib: u64,
     /// which pipeline to run (Rufus boot-selection modes)
@@ -268,8 +271,7 @@ pub enum WriteMode {
     WindowsToGo,
 }
 
-
-    /// Rufus "Windows User Experience" customization flags.
+/// Rufus "Windows User Experience" customization flags.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WueOptions {
     /// Remove requirement for 4GB+ RAM, Secure Boot and TPM 2.0
@@ -343,8 +345,14 @@ const FREEDOS_COMMAND: &[u8] = include_bytes!("../assets/freedos/COMMAND.COM");
 fn assemble_freedos_br(bpb: &[u8]) -> Vec<u8> {
     const _: () = {
         assert!(FREEDOS_BR_0X0.len() == 0x0B, "br_fat32_0x0 fragment size");
-        assert!(FREEDOS_BR_0X52.len() == 0x3E8 - 0x52, "br_fat32_0x52 fragment size");
-        assert!(FREEDOS_BR_FD_0X3F0.len() == 0x600 - 0x3F0, "br_fat32fd_0x3f0 fragment size");
+        assert!(
+            FREEDOS_BR_0X52.len() == 0x3E8 - 0x52,
+            "br_fat32_0x52 fragment size"
+        );
+        assert!(
+            FREEDOS_BR_FD_0X3F0.len() == 0x600 - 0x3F0,
+            "br_fat32fd_0x3f0 fragment size"
+        );
     };
     let mut br = vec![0u8; 0x600];
     br[0x0..0x0B].copy_from_slice(FREEDOS_BR_0X0);
@@ -392,11 +400,14 @@ fn find_tool(name: &str) -> Option<String> {
 /// Case-insensitive lookup of `sources/install.wim|install.esd|install.swm`
 /// in the ISO (Windows images mix casing; our extractor preserves ISO names).
 pub fn find_windows_wim(iso: &IsoImage) -> Option<&iso9660::IsoEntry> {
-    const NAMES: [&str; 3] = ["sources/install.wim", "sources/install.esd", "sources/install.swm"];
-    iso.entries.iter().find(|e| {
-        !e.is_dir
-            && NAMES.iter().any(|n| e.path.eq_ignore_ascii_case(n))
-    })
+    const NAMES: [&str; 3] = [
+        "sources/install.wim",
+        "sources/install.esd",
+        "sources/install.swm",
+    ];
+    iso.entries
+        .iter()
+        .find(|e| !e.is_dir && NAMES.iter().any(|n| e.path.eq_ignore_ascii_case(n)))
 }
 
 /// One edition of an install.wim: 1-based index + display name.
@@ -459,10 +470,16 @@ fn parse_wim_xml(xml: &[u8]) -> Vec<WimImage> {
     };
     let mut out = Vec::new();
     for block in text.split("<IMAGE ") {
-        let Some(idx_pos) = block.find("INDEX=\"") else { continue };
+        let Some(idx_pos) = block.find("INDEX=\"") else {
+            continue;
+        };
         let rest = &block[idx_pos + 7..];
-        let Some(idx_end) = rest.find('"') else { continue };
-        let Ok(index) = rest[..idx_end].parse::<u32>() else { continue };
+        let Some(idx_end) = rest.find('"') else {
+            continue;
+        };
+        let Ok(index) = rest[..idx_end].parse::<u32>() else {
+            continue;
+        };
         let name = ["DISPLAYNAME", "NAME", "DESCRIPTION"]
             .iter()
             .find_map(|tag| {
@@ -510,7 +527,11 @@ fn find_case_insensitive(root: &Path, rel: &str) -> Option<PathBuf> {
         }
         cur = found?;
     }
-    if cur.is_file() { Some(cur) } else { None }
+    if cur.is_file() {
+        Some(cur)
+    } else {
+        None
+    }
 }
 
 /// Random GUID string "{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}".
@@ -544,7 +565,6 @@ struct PreppedPart {
     /// GPT GUID of the main partition (EMPTY on MBR)
     part_guid: crate::gpt::Guid,
 }
-
 
 pub struct Engine {
     pub options: Options,
@@ -660,7 +680,10 @@ impl<'a> Seek for RegionWriter<'a> {
             SeekFrom::End(n) => self.disk.size as i128 + n as i128,
         };
         if new < 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "negative seek"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "negative seek",
+            ));
         }
         self.pos = new as u64;
         Ok(self.pos)
@@ -742,21 +765,32 @@ fn compute_layout(disk_sectors: u64, req: LayoutReq) -> crate::error::Result<Lay
     } else {
         0
     };
-    let upper_end =
-        if compat_start > 0 { compat_start } else { disk_sectors.saturating_sub(TAIL_GAP) };
+    let upper_end = if compat_start > 0 {
+        compat_start
+    } else {
+        disk_sectors.saturating_sub(TAIL_GAP)
+    };
     let uefi_ntfs_start = if req.uefi_ntfs_sectors > 0 {
         align(upper_end.saturating_sub(req.uefi_ntfs_sectors + req.persist_sectors))
     } else {
         0
     };
     let persist_start = if req.persist_sectors > 0 {
-        let raw = if uefi_ntfs_start > 0 { uefi_ntfs_start } else { upper_end };
+        let raw = if uefi_ntfs_start > 0 {
+            uefi_ntfs_start
+        } else {
+            upper_end
+        };
         align(raw.saturating_sub(req.persist_sectors))
     } else {
         0
     };
     let (persist_len, part_end_lba) = if req.persist_sectors > 0 {
-        let end = if uefi_ntfs_start > 0 { uefi_ntfs_start } else { upper_end };
+        let end = if uefi_ntfs_start > 0 {
+            uefi_ntfs_start
+        } else {
+            upper_end
+        };
         (end - persist_start, persist_start.saturating_sub(1))
     } else if uefi_ntfs_start > 0 {
         (0, uefi_ntfs_start.saturating_sub(1))
@@ -768,12 +802,21 @@ fn compute_layout(disk_sectors: u64, req: LayoutReq) -> crate::error::Result<Lay
     if part_end_lba <= req.part_start_lba {
         return Err(crate::error::Error::DeviceTooSmall);
     }
-    Ok(Layout { part_end_lba, uefi_ntfs_start, persist_start, persist_len, compat_start })
+    Ok(Layout {
+        part_end_lba,
+        uefi_ntfs_start,
+        persist_start,
+        persist_len,
+        compat_start,
+    })
 }
 
 impl Engine {
     pub fn new(options: Options) -> Self {
-        Engine { options, cancel: None }
+        Engine {
+            options,
+            cancel: None,
+        }
     }
 
     /// Attach a cooperative cancellation flag (GUI stop button).
@@ -859,27 +902,49 @@ impl Engine {
             }
             (sz, Box::new(src_file))
         };
-        progress(Progress { phase: "open".into(), done: 0, total: img_size, message: format!("Opening {}", dev.path) });
+        progress(Progress {
+            phase: "open".into(),
+            done: 0,
+            total: img_size,
+            message: format!("Opening {}", dev.path),
+        });
         let mut disk = Disk::open(&dev.path)?;
         if self.options.bb_test != BadBlocksTest::Disabled {
             self.badblocks_test(&mut disk, progress)?;
         }
-        progress(Progress { phase: "write".into(), done: 0, total: img_size, message: "Writing image...".into() });
+        progress(Progress {
+            phase: "write".into(),
+            done: 0,
+            total: img_size,
+            message: "Writing image...".into(),
+        });
         let mut buf = vec![0u8; 4 * 1024 * 1024];
         let mut off = 0u64;
         loop {
             self.check_cancel()?;
             let n = src.read(&mut buf)?;
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             if off + n as u64 > dev.size {
                 bail!("image is larger than device ({})", dev.size);
             }
             disk.write_at(off, &buf[..n])?;
             off += n as u64;
-            progress(Progress { phase: "write".into(), done: off, total: img_size, message: String::new() });
+            progress(Progress {
+                phase: "write".into(),
+                done: off,
+                total: img_size,
+                message: String::new(),
+            });
         }
         disk.file.sync_all()?;
-        progress(Progress { phase: "done".into(), done: img_size, total: img_size, message: "Raw write complete".into() });
+        progress(Progress {
+            phase: "done".into(),
+            done: img_size,
+            total: img_size,
+            message: "Raw write complete".into(),
+        });
         Ok(())
     }
 
@@ -891,7 +956,12 @@ impl Engine {
         progress: &mut dyn FnMut(Progress),
     ) -> Result<()> {
         // 1. open ISO and get info
-        progress(Progress { phase: "inspect".into(), done: 0, total: 0, message: "Reading ISO...".into() });
+        progress(Progress {
+            phase: "inspect".into(),
+            done: 0,
+            total: 0,
+            message: "Reading ISO...".into(),
+        });
         let mut iso_file = std::fs::File::open(image_path)?;
         let iso: IsoImage = iso9660::parse_iso(&mut iso_file)?;
         let total_files = iso.entries.iter().filter(|e| !e.is_dir).count() as u64;
@@ -903,13 +973,28 @@ impl Engine {
             .entries
             .iter()
             .any(|e| e.path.starts_with("isolinux/") || e.path.starts_with("syslinux/"));
-        tracing::info!("ISO '{}' files={} efi={} syslinux={}", iso.volume_id, total_files, has_efi, syslinux_dir);
+        tracing::info!(
+            "ISO '{}' files={} efi={} syslinux={}",
+            iso.volume_id,
+            total_files,
+            has_efi,
+            syslinux_dir
+        );
 
         // 2. open disk + wipe
-        progress(Progress { phase: "open".into(), done: 0, total: 0, message: format!("Opening {}", dev.path) });
+        progress(Progress {
+            phase: "open".into(),
+            done: 0,
+            total: 0,
+            message: format!("Opening {}", dev.path),
+        });
         let mut disk = Disk::open(&dev.path)?;
-        let PreppedPart { part_dev, part_start_lba, sector_size, .. } =
-            self.partition_and_format(dev, &mut disk, progress)?;
+        let PreppedPart {
+            part_dev,
+            part_start_lba,
+            sector_size,
+            ..
+        } = self.partition_and_format(dev, &mut disk, progress)?;
 
         // 5. mount main partition
         let mnt = format!("/tmp/rufus-linux-{}", dev.name);
@@ -917,7 +1002,12 @@ impl Engine {
         // desktop automounters may have attached the freshly formatted
         // partition in the meantime — detach before mounting
         unmount_device_partitions(&dev.path);
-        progress(Progress { phase: "mount".into(), done: 0, total: 0, message: format!("Mounting {part_dev} at {mnt}") });
+        progress(Progress {
+            phase: "mount".into(),
+            done: 0,
+            total: 0,
+            message: format!("Mounting {part_dev} at {mnt}"),
+        });
         mount_fs(&part_dev, &mnt, self.options.fs)?;
 
         // 6. copy files
@@ -925,8 +1015,18 @@ impl Engine {
             let mnt_path = PathBuf::from(&mnt);
             // byte-based progress: a single 4 GiB install.wim would otherwise
             // sit at "1 file" for minutes
-            let total_bytes: u64 = iso.entries.iter().filter(|e| !e.is_dir).map(|e| e.size).sum();
-            progress(Progress { phase: "copy".into(), done: 0, total: total_bytes, message: "Copying files...".into() });
+            let total_bytes: u64 = iso
+                .entries
+                .iter()
+                .filter(|e| !e.is_dir)
+                .map(|e| e.size)
+                .sum();
+            progress(Progress {
+                phase: "copy".into(),
+                done: 0,
+                total: total_bytes,
+                message: "Copying files...".into(),
+            });
             let mut copied = 0u64;
             let mut bytes_done = 0u64;
             let mut last_report = 0u64;
@@ -940,7 +1040,11 @@ impl Engine {
                 let written = iso9660::extract_file(&mut iso_file, e, &dest)?;
                 self.apply_preserved_mtime(&dest, e);
                 if written != e.size {
-                    tracing::warn!("{} truncated in image ({} bytes missing)", e.path, e.size - written);
+                    tracing::warn!(
+                        "{} truncated in image ({} bytes missing)",
+                        e.path,
+                        e.size - written
+                    );
                 }
                 bytes_done += written;
                 copied += 1;
@@ -949,7 +1053,12 @@ impl Engine {
                     || bytes_done - last_report >= 16 * 1024 * 1024
                 {
                     last_report = bytes_done;
-                    progress(Progress { phase: "copy".into(), done: bytes_done, total: total_bytes, message: String::new() });
+                    progress(Progress {
+                        phase: "copy".into(),
+                        done: bytes_done,
+                        total: total_bytes,
+                        message: String::new(),
+                    });
                 }
             }
             // verify while the filesystem is still mounted and before any
@@ -966,7 +1075,11 @@ impl Engine {
             self.check_cancel()?;
             self.handle_install_wim(&mnt_path, progress)?;
             // boot files
-            let boot_target = BootTarget { part_dev: &part_dev, part_start_lba, sector_size };
+            let boot_target = BootTarget {
+                part_dev: &part_dev,
+                part_start_lba,
+                sector_size,
+            };
             self.install_boot(&mnt_path, &iso, syslinux_dir, &boot_target, progress)?;
             // extended label + icon files (last, like Rufus's finalize step)
             self.write_autorun_files(&mnt_path)?;
@@ -979,10 +1092,14 @@ impl Engine {
         flush_partition(&part_dev);
         result?;
         disk.file.sync_all()?;
-        progress(Progress { phase: "done".into(), done: total_files, total: total_files, message: "Done!".into() });
+        progress(Progress {
+            phase: "done".into(),
+            done: total_files,
+            total: total_files,
+            message: "Done!".into(),
+        });
         Ok(())
     }
-
 
     /// Shared write path: wipe, partition, format and prepare the trailing
     /// partitions (persistence / UEFI:NTFS). Used by the ISO, non-bootable
@@ -1021,7 +1138,12 @@ impl Engine {
             };
             tracing::info!("erasing existing partition table: {style}");
         }
-        progress(Progress { phase: "wipe".into(), done: 0, total: 0, message: "Wiping signatures...".into() });
+        progress(Progress {
+            phase: "wipe".into(),
+            done: 0,
+            total: 0,
+            message: "Wiping signatures...".into(),
+        });
         disk.wipe_signatures()?;
 
         // 3. partition table
@@ -1037,7 +1159,9 @@ impl Engine {
         let use_persistent = self.options.persistence_mib > 0 && !wtg;
         let uefi_ntfs_sectors = if use_uefi_ntfs {
             (UEFI_NTFS_IMG.len() as u64).div_ceil(512)
-        } else { 0 };
+        } else {
+            0
+        };
         let disk_sectors = disk.size / 512;
         // "Add fixes for old BIOSes" (Rufus XP_COMPAT): a one-track "BIOS
         // Compatibility" partition at the end of the disk for BIOSes that
@@ -1046,7 +1170,11 @@ impl Engine {
         // GRUB2 core still fits, like Rufus does)
         let (_, heads, spt) = disk.geometry();
         let track_sectors = spt.max(1) as u64 * disk.sector_size / 512;
-        let compat_sectors = if self.options.old_bios_fixes { track_sectors } else { 0 };
+        let compat_sectors = if self.options.old_bios_fixes {
+            track_sectors
+        } else {
+            0
+        };
         // Rufus/drive.c WTG layout: ESP 260 MB "to keep everyone happy,
         // including 4K sector users", MSR 128 MB, both ahead of the data
         // partition on GPT
@@ -1054,9 +1182,7 @@ impl Engine {
         const WTG_MSR_SECTORS: u64 = (128 * 1024 * 1024) / 512;
         let part_start_lba = if wtg && self.options.scheme == PartitionScheme::Gpt {
             2048 + WTG_ESP_SECTORS + WTG_MSR_SECTORS
-        } else if self.options.old_bios_fixes
-            && self.options.scheme == PartitionScheme::Mbr
-        {
+        } else if self.options.old_bios_fixes && self.options.scheme == PartitionScheme::Mbr {
             2 * track_sectors
         } else {
             2048 // 1 MiB
@@ -1068,15 +1194,23 @@ impl Engine {
         } else {
             0
         };
-        let Layout { part_end_lba, uefi_ntfs_start, persist_start, persist_len, compat_start } =
-            compute_layout(disk_sectors, LayoutReq {
+        let Layout {
+            part_end_lba,
+            uefi_ntfs_start,
+            persist_start,
+            persist_len,
+            compat_start,
+        } = compute_layout(
+            disk_sectors,
+            LayoutReq {
                 part_start_lba,
                 uefi_ntfs_sectors,
                 persist_sectors,
                 compat_sectors,
                 track_sectors,
                 gpt: self.options.scheme == PartitionScheme::Gpt,
-            })?;
+            },
+        )?;
         if compat_sectors > 0 {
             tracing::info!(
                 "old-BIOS fixes: 'BIOS Compatibility' partition at LBA {compat_start} \
@@ -1084,7 +1218,12 @@ impl Engine {
             );
         }
 
-        progress(Progress { phase: "partition".into(), done: 0, total: 0, message: "Writing partition table...".into() });
+        progress(Progress {
+            phase: "partition".into(),
+            done: 0,
+            total: 0,
+            message: "Writing partition table...".into(),
+        });
         let main_fs_mbr = match self.options.fs {
             FsKind::Fat32 => FsType::Fat32Lba,
             FsKind::Ntfs | FsKind::Exfat => FsType::Ntfs,
@@ -1098,8 +1237,8 @@ impl Engine {
             PartitionScheme::Mbr => {
                 // a "Non bootable" write gets no bootable flag (Rufus:
                 // BT_NON_BOOTABLE only formats, the MBR is zeroed)
-                let bootable = !self.options.efi_only
-                    && self.options.write_mode != WriteMode::NonBootable;
+                let bootable =
+                    !self.options.efi_only && self.options.write_mode != WriteMode::NonBootable;
                 let mut parts = vec![Partition {
                     bootable,
                     fs: main_fs_mbr,
@@ -1107,8 +1246,7 @@ impl Engine {
                     sectors: part_end_lba - part_start_lba + 1,
                 }];
                 // random disk signature — every stick should be unique
-                let sig =
-                    u32::from_le_bytes(random_bytes(4).try_into().expect("4 bytes"));
+                let sig = u32::from_le_bytes(random_bytes(4).try_into().expect("4 bytes"));
                 disk_sig_ret = sig;
                 main_part_index = 1;
                 if use_persistent {
@@ -1126,8 +1264,11 @@ impl Engine {
                         start_lba: uefi_ntfs_start,
                         // with the compat partition at the tail, the UEFI:NTFS
                         // entry must stop right below it
-                        sectors: (if compat_start > 0 { compat_start } else { disk_sectors })
-                            - uefi_ntfs_start,
+                        sectors: (if compat_start > 0 {
+                            compat_start
+                        } else {
+                            disk_sectors
+                        }) - uefi_ntfs_start,
                     });
                     // fix type byte for UEFI:NTFS partition to 0xEF (ESP)
                     // FsType has no Esp variant; encode via raw? use Fat32Lba is wrong.
@@ -1146,28 +1287,32 @@ impl Engine {
                 // "Use Rufus MBR with BIOS ID": checked = the Rufus MBR boot
                 // code, unchecked = the Windows 7 MBR (Rufus format.c parity);
                 // UEFI-only/non-bootable writes get a zeroed boot code
-                let code: Option<&[u8]> = if self.options.efi_only
-                    || self.options.write_mode == WriteMode::NonBootable
-                {
-                    None
-                } else if self.options.rufus_mbr {
-                    tracing::info!("Using Rufus MBR");
-                    Some(MBR_BOOTCODE)
-                } else {
-                    tracing::info!("Using Windows 7 MBR");
-                    Some(MBR_WIN7)
-                };
+                let code: Option<&[u8]> =
+                    if self.options.efi_only || self.options.write_mode == WriteMode::NonBootable {
+                        None
+                    } else if self.options.rufus_mbr {
+                        tracing::info!("Using Rufus MBR");
+                        Some(MBR_BOOTCODE)
+                    } else {
+                        tracing::info!("Using Windows 7 MBR");
+                        Some(MBR_WIN7)
+                    };
                 let mut mbr_sec = mbr::build_mbr(&parts, code, sig, heads as u16, spt);
                 // Rufus format.c: "Set first partition bootable - masquerade
                 // as per the DiskID selected" — only for bootable BIOS writes
                 // with the Rufus MBR
                 if bootable && self.options.rufus_mbr && self.options.disk_id != 0x80 {
                     mbr_sec[0x1BE] = self.options.disk_id;
-                    tracing::info!("Set bootable USB partition as 0x{:02X}", self.options.disk_id);
+                    tracing::info!(
+                        "Set bootable USB partition as 0x{:02X}",
+                        self.options.disk_id
+                    );
                 }
                 // patch extra partition types: persistence=0x83 already Linux, uefi-ntfs=0xEF
                 let mut idx = 1usize;
-                if use_persistent { idx += 1; }
+                if use_persistent {
+                    idx += 1;
+                }
                 if use_uefi_ntfs {
                     mbr_sec[0x1BE + idx * 16 + 4] = 0xEF;
                 }
@@ -1214,10 +1359,8 @@ impl Engine {
                     // Rufus WTG GPT layout: [ESP][MSR][main]
                     let esp_guid = crate::gpt::Guid(random_bytes(16).try_into().expect("16"));
                     let msr_guid = crate::gpt::Guid(random_bytes(16).try_into().expect("16"));
-                    let part_guid =
-                        crate::gpt::Guid(random_bytes(16).try_into().expect("16"));
-                    let disk_guid =
-                        crate::gpt::Guid(random_bytes(16).try_into().expect("16"));
+                    let part_guid = crate::gpt::Guid(random_bytes(16).try_into().expect("16"));
+                    let disk_guid = crate::gpt::Guid(random_bytes(16).try_into().expect("16"));
                     let esp_start = 2048;
                     let (mbr_sec, hdr, entries) = crate::gpt::build_gpt_entries(
                         sectors,
@@ -1255,13 +1398,14 @@ impl Engine {
                 } else {
                     // GPT path: main partition from build_gpt_single, plus optional
                     // persistence / UEFI:NTFS entries in partition order (2, 3).
-                    let guid =
-                        crate::gpt::Guid(random_bytes(16).try_into().expect("16 bytes"));
-                    let (mbr_sec, mut hdr, mut entries) = crate::gpt::build_gpt_single(
-                        sectors, part_start_lba, part_end_lba, guid,
-                    )?;
-                    let set_entry = |entries: &mut [[u8; 512]], idx: usize,
-                                     type_guid: &crate::gpt::Guid, first: u64, last: u64,
+                    let guid = crate::gpt::Guid(random_bytes(16).try_into().expect("16 bytes"));
+                    let (mbr_sec, mut hdr, mut entries) =
+                        crate::gpt::build_gpt_single(sectors, part_start_lba, part_end_lba, guid)?;
+                    let set_entry = |entries: &mut [[u8; 512]],
+                                     idx: usize,
+                                     type_guid: &crate::gpt::Guid,
+                                     first: u64,
+                                     last: u64,
                                      name: &str| {
                         let e = &mut entries[0][idx * 128..(idx + 1) * 128];
                         e[0..16].copy_from_slice(&type_guid.0);
@@ -1274,8 +1418,14 @@ impl Engine {
                     };
                     let mut idx = 1usize;
                     if use_persistent {
-                        set_entry(&mut entries, idx, &crate::gpt::Guid::LINUX_FS,
-                            persist_start, persist_start + persist_len - 1, "casper-rw");
+                        set_entry(
+                            &mut entries,
+                            idx,
+                            &crate::gpt::Guid::LINUX_FS,
+                            persist_start,
+                            persist_start + persist_len - 1,
+                            "casper-rw",
+                        );
                         idx += 1;
                     }
                     if use_uefi_ntfs {
@@ -1286,20 +1436,33 @@ impl Engine {
                         } else {
                             sectors.saturating_sub(34)
                         };
-                        set_entry(&mut entries, idx, &crate::gpt::Guid::EFI_SYSTEM,
-                            uefi_ntfs_start, uefi_last, "UEFI:NTFS");
+                        set_entry(
+                            &mut entries,
+                            idx,
+                            &crate::gpt::Guid::EFI_SYSTEM,
+                            uefi_ntfs_start,
+                            uefi_last,
+                            "UEFI:NTFS",
+                        );
                     }
                     if compat_start > 0 {
                         // Rufus "BIOS Compatibility": a Microsoft basic data entry
                         // on GPT, same one-track size as the MBR variant
                         let compat_idx = if use_uefi_ntfs { idx + 1 } else { idx };
-                        set_entry(&mut entries, compat_idx, &crate::gpt::Guid::MS_BASIC_DATA,
-                            compat_start, compat_start + compat_sectors - 1,
-                            "BIOS Compatibility");
+                        set_entry(
+                            &mut entries,
+                            compat_idx,
+                            &crate::gpt::Guid::MS_BASIC_DATA,
+                            compat_start,
+                            compat_start + compat_sectors - 1,
+                            "BIOS Compatibility",
+                        );
                     }
                     // recompute entries CRC
                     let mut eb = Vec::with_capacity(entries.len() * 512);
-                    for s in &entries { eb.extend_from_slice(s); }
+                    for s in &entries {
+                        eb.extend_from_slice(s);
+                    }
                     let ecrc = crate::gpt::crc32(&eb) as u64;
                     hdr[88..96].copy_from_slice(&ecrc.to_le_bytes());
                     hdr[16..20].copy_from_slice(&0u32.to_le_bytes());
@@ -1327,7 +1490,9 @@ impl Engine {
                 Err(e) if tries < 5 => {
                     std::thread::sleep(std::time::Duration::from_millis(300));
                     tries += 1;
-                    if tries == 5 { return Err(e); }
+                    if tries == 5 {
+                        return Err(e);
+                    }
                 }
                 Err(e) => return Err(e),
             }
@@ -1336,31 +1501,61 @@ impl Engine {
         // 4. format main partition
         let part_bytes = (part_end_lba - part_start_lba + 1) * 512;
         let part_dev = crate::device::partition_node(&dev.path, main_part_index);
-        progress(Progress { phase: "format".into(), done: 0, total: part_bytes, message: format!("Formatting {}...", self.options.fs.name()) });
+        progress(Progress {
+            phase: "format".into(),
+            done: 0,
+            total: part_bytes,
+            message: format!("Formatting {}...", self.options.fs.name()),
+        });
         match self.options.fs {
             FsKind::Fat32 => {
-                let mut w = RegionWriter { disk, base: part_start_lba * 512, pos: 0 };
+                let mut w = RegionWriter {
+                    disk,
+                    base: part_start_lba * 512,
+                    pos: 0,
+                };
                 let fat_label = sanitize_fat_label(&self.options.fs_label);
-                fat32::format_fat32(&mut w, part_bytes, bps, &fat_label, part_start_lba as u32, !self.options.quick, &mut |d, t| {
-                    progress(Progress { phase: "format".into(), done: d, total: t, message: "Formatting FAT32...".into() });
-                })?;
+                fat32::format_fat32(
+                    &mut w,
+                    part_bytes,
+                    bps,
+                    &fat_label,
+                    part_start_lba as u32,
+                    !self.options.quick,
+                    &mut |d, t| {
+                        progress(Progress {
+                            phase: "format".into(),
+                            done: d,
+                            total: t,
+                            message: "Formatting FAT32...".into(),
+                        });
+                    },
+                )?;
             }
             FsKind::Ntfs | FsKind::Exfat => {
                 // external mkfs on the partition device node; mkfs.ntfs lives
                 // in /usr/sbin which is missing from some elevated PATHs
                 let tool = if matches!(self.options.fs, FsKind::Ntfs) {
-                    find_tool("mkfs.ntfs").context("mkfs.ntfs not found (install the ntfs-3g package)")?
+                    find_tool("mkfs.ntfs")
+                        .context("mkfs.ntfs not found (install the ntfs-3g package)")?
                 } else {
                     find_tool("mkfs.exfat").context("mkfs.exfat not found (install exfatprogs)")?
                 };
                 let mut args: Vec<String> = vec!["-F".into()]; // fast/force where supported
                 if matches!(self.options.fs, FsKind::Ntfs) {
-                    args = vec!["-Q".into(), "-F".into(), "-L".into(), self.options.fs_label.clone()];
+                    args = vec![
+                        "-Q".into(),
+                        "-F".into(),
+                        "-L".into(),
+                        self.options.fs_label.clone(),
+                    ];
                 } else {
                     args = vec!["-n".into(), self.options.fs_label.clone()];
                 }
                 args.push(part_dev.clone());
-                let st = Command::new(&tool).args(&args).status()
+                let st = Command::new(&tool)
+                    .args(&args)
+                    .status()
                     .with_context(|| format!("{tool} failed/missing"))?;
                 if !st.success() {
                     bail!("{tool} exited with {st}");
@@ -1374,18 +1569,45 @@ impl Engine {
         // sector size and no label)
         if wtg && esp_lba > 0 {
             let esp_bytes = WTG_ESP_SECTORS * 512;
-            progress(Progress { phase: "format".into(), done: 0, total: esp_bytes, message: "Formatting EFI System Partition...".into() });
-            let mut w = RegionWriter { disk, base: esp_lba * 512, pos: 0 };
-            fat32::format_fat32(&mut w, esp_bytes, bps, "", esp_lba as u32, !self.options.quick, &mut |d, t| {
-                progress(Progress { phase: "format".into(), done: d, total: t, message: "Formatting ESP (FAT32)...".into() });
-            })?;
+            progress(Progress {
+                phase: "format".into(),
+                done: 0,
+                total: esp_bytes,
+                message: "Formatting EFI System Partition...".into(),
+            });
+            let mut w = RegionWriter {
+                disk,
+                base: esp_lba * 512,
+                pos: 0,
+            };
+            fat32::format_fat32(
+                &mut w,
+                esp_bytes,
+                bps,
+                "",
+                esp_lba as u32,
+                !self.options.quick,
+                &mut |d, t| {
+                    progress(Progress {
+                        phase: "format".into(),
+                        done: d,
+                        total: t,
+                        message: "Formatting ESP (FAT32)...".into(),
+                    });
+                },
+            )?;
             disk.file.sync_all()?;
         }
 
         // 4b. write UEFI:NTFS image raw to trailing partition
         if use_uefi_ntfs {
             let p2 = crate::device::partition_node(&dev.path, if use_persistent { 3 } else { 2 });
-            progress(Progress { phase: "uefi-ntfs".into(), done: 0, total: UEFI_NTFS_IMG.len() as u64, message: "Writing UEFI:NTFS partition...".into() });
+            progress(Progress {
+                phase: "uefi-ntfs".into(),
+                done: 0,
+                total: UEFI_NTFS_IMG.len() as u64,
+                message: "Writing UEFI:NTFS partition...".into(),
+            });
             let mut f = crate::disk::open_partition(&p2)?;
             use std::io::Write as _;
             f.write_all(UEFI_NTFS_IMG)?;
@@ -1400,8 +1622,18 @@ impl Engine {
                 .args(["-q", "-F", "-L", "casper-rw", &persist_dev])
                 .status();
             match st {
-                Ok(s) if s.success() => progress(Progress { phase: "format".into(), done: 1, total: 1, message: "Persistence partition (casper-rw) ready".into() }),
-                _ => progress(Progress { phase: "format".into(), done: 0, total: 1, message: "WARNING: mkfs.ext4 failed — persistence unavailable".into() }),
+                Ok(s) if s.success() => progress(Progress {
+                    phase: "format".into(),
+                    done: 1,
+                    total: 1,
+                    message: "Persistence partition (casper-rw) ready".into(),
+                }),
+                _ => progress(Progress {
+                    phase: "format".into(),
+                    done: 0,
+                    total: 1,
+                    message: "WARNING: mkfs.ext4 failed — persistence unavailable".into(),
+                }),
             }
         }
         Ok(PreppedPart {
@@ -1444,7 +1676,12 @@ impl Engine {
         progress: &mut dyn FnMut(Progress),
     ) -> Result<()> {
         use sha2::{Digest, Sha256};
-        progress(Progress { phase: "verify".into(), done: 0, total: total_files, message: "Verifying (SHA-256)...".into() });
+        progress(Progress {
+            phase: "verify".into(),
+            done: 0,
+            total: total_files,
+            message: "Verifying (SHA-256)...".into(),
+        });
         let mut iso_file = std::fs::File::open(image_path)?;
         let mut buf = vec![0u8; 1 << 20];
         let files: Vec<&iso9660::IsoEntry> = iso.entries.iter().filter(|e| !e.is_dir).collect();
@@ -1457,7 +1694,11 @@ impl Engine {
                 let want = remaining.min(buf.len() as u64) as usize;
                 let n = iso_file.read(&mut buf[..want])?;
                 if n == 0 {
-                    bail!("verify: {} truncated in image ({} bytes missing)", e.path, remaining);
+                    bail!(
+                        "verify: {} truncated in image ({} bytes missing)",
+                        e.path,
+                        remaining
+                    );
                 }
                 h_iso.update(&buf[..n]);
                 remaining -= n as u64;
@@ -1471,9 +1712,19 @@ impl Engine {
                 bail!("verify failed: {} content mismatch", e.path);
             }
             self.check_cancel()?;
-            progress(Progress { phase: "verify".into(), done: (i + 1) as u64, total: total_files, message: "Verifying (SHA-256)...".into() });
+            progress(Progress {
+                phase: "verify".into(),
+                done: (i + 1) as u64,
+                total: total_files,
+                message: "Verifying (SHA-256)...".into(),
+            });
         }
-        progress(Progress { phase: "verify".into(), done: total_files, total: total_files, message: "Verify OK".into() });
+        progress(Progress {
+            phase: "verify".into(),
+            done: total_files,
+            total: total_files,
+            message: "Verify OK".into(),
+        });
         Ok(())
     }
 
@@ -1542,7 +1793,12 @@ impl Engine {
             let _ = std::fs::remove_dir_all(&mnt);
         }
         disk.file.sync_all()?;
-        progress(Progress { phase: "done".into(), done: 1, total: 1, message: "Non-bootable format complete".into() });
+        progress(Progress {
+            phase: "done".into(),
+            done: 1,
+            total: 1,
+            message: "Non-bootable format complete".into(),
+        });
         Ok(())
     }
 
@@ -1554,7 +1810,10 @@ impl Engine {
         }
         let mut disk = Disk::open(&dev.path)?;
         if disk.sector_size != 512 {
-            bail!("FreeDOS BIOS boot is not possible on {}-byte sectors", disk.sector_size);
+            bail!(
+                "FreeDOS BIOS boot is not possible on {}-byte sectors",
+                disk.sector_size
+            );
         }
         let prep = self.partition_and_format(dev, &mut disk, progress)?;
 
@@ -1575,15 +1834,29 @@ impl Engine {
         detach_mounts(&dev.path);
         mount_fs(&prep.part_dev, &mnt, FsKind::Fat32)?;
         let result = (|| -> Result<()> {
-            progress(Progress { phase: "copy".into(), done: 0, total: 2, message: "Writing FreeDOS files...".into() });
+            progress(Progress {
+                phase: "copy".into(),
+                done: 0,
+                total: 2,
+                message: "Writing FreeDOS files...".into(),
+            });
             std::fs::write(Path::new(&mnt).join("KERNEL.SYS"), FREEDOS_KERNEL)?;
             std::fs::write(Path::new(&mnt).join("COMMAND.COM"), FREEDOS_COMMAND)?;
-            progress(Progress { phase: "copy".into(), done: 2, total: 2, message: "Writing FreeDOS files...".into() });
+            progress(Progress {
+                phase: "copy".into(),
+                done: 2,
+                total: 2,
+                message: "Writing FreeDOS files...".into(),
+            });
             // minimal DOS configuration (CRLF line endings — DOS requires them)
-            std::fs::write(Path::new(&mnt).join("AUTOEXEC.BAT"),
-                b"@ECHO OFF\r\nCLS\r\nVER\r\n")?;
-            std::fs::write(Path::new(&mnt).join("CONFIG.SYS"),
-                b"FILES=40\r\nBUFFERS=20\r\nLASTDRIVE=Z\r\n")?;
+            std::fs::write(
+                Path::new(&mnt).join("AUTOEXEC.BAT"),
+                b"@ECHO OFF\r\nCLS\r\nVER\r\n",
+            )?;
+            std::fs::write(
+                Path::new(&mnt).join("CONFIG.SYS"),
+                b"FILES=40\r\nBUFFERS=20\r\nLASTDRIVE=Z\r\n",
+            )?;
             self.write_autorun_files(Path::new(&mnt))?;
             Ok(())
         })();
@@ -1592,7 +1865,12 @@ impl Engine {
         let _ = std::fs::remove_dir_all(&mnt);
         result?;
         disk.file.sync_all()?;
-        progress(Progress { phase: "done".into(), done: 1, total: 1, message: "FreeDOS stick ready".into() });
+        progress(Progress {
+            phase: "done".into(),
+            done: 1,
+            total: 1,
+            message: "FreeDOS stick ready".into(),
+        });
         Ok(())
     }
 
@@ -1613,11 +1891,18 @@ impl Engine {
             bail!("Windows To Go can only be applied with the NTFS file system");
         }
         // 1. inspect the ISO
-        progress(Progress { phase: "inspect".into(), done: 0, total: 0, message: "Reading ISO...".into() });
+        progress(Progress {
+            phase: "inspect".into(),
+            done: 0,
+            total: 0,
+            message: "Reading ISO...".into(),
+        });
         let mut iso_file = std::fs::File::open(image_path)?;
         let iso: IsoImage = iso9660::parse_iso(&mut iso_file)?;
         let wim_entry = find_windows_wim(&iso).ok_or_else(|| {
-            anyhow::anyhow!("the image has no sources/install.wim — Windows To Go needs a Windows install ISO")
+            anyhow::anyhow!(
+                "the image has no sources/install.wim — Windows To Go needs a Windows install ISO"
+            )
         })?;
         let wim_size = wim_entry.size;
         let is_swm = wim_entry.path.to_lowercase().ends_with(".swm");
@@ -1636,7 +1921,12 @@ impl Engine {
         };
 
         // 2. wipe + partition + format (NTFS main, ESP/MSR on GPT)
-        progress(Progress { phase: "open".into(), done: 0, total: 0, message: format!("Opening {}", dev.path) });
+        progress(Progress {
+            phase: "open".into(),
+            done: 0,
+            total: 0,
+            message: format!("Opening {}", dev.path),
+        });
         let mut disk = Disk::open(&dev.path)?;
         let prep = self.partition_and_format(dev, &mut disk, progress)?;
 
@@ -1676,26 +1966,34 @@ impl Engine {
                     } else {
                         vec![wim_entry.path.clone()]
                     };
-                    let out_dir = std::env::temp_dir().join(format!("rufus-wim-{}", std::process::id()));
+                    let out_dir =
+                        std::env::temp_dir().join(format!("rufus-wim-{}", std::process::id()));
                     std::fs::create_dir_all(&out_dir)?;
                     for (i, name) in names.iter().enumerate() {
-                        let e = iso.entries.iter().find(|e| &e.path == name)
+                        let e = iso
+                            .entries
+                            .iter()
+                            .find(|e| &e.path == name)
                             .ok_or_else(|| anyhow::anyhow!("missing {name} in ISO"))?;
                         let dest = out_dir.join(name.rsplit('/').next().unwrap_or(name));
                         progress(Progress {
-                            phase: "wtg-wim".into(), done: i as u64, total: names.len() as u64,
+                            phase: "wtg-wim".into(),
+                            done: i as u64,
+                            total: names.len() as u64,
                             message: format!("Extracting {} ...", e.path),
                         });
                         iso9660::extract_file(&mut iso_file, e, &dest)?;
                     }
-                    let first = out_dir.join(
-                        wim_entry.path.rsplit('/').next().unwrap_or("install.wim"),
-                    );
+                    let first =
+                        out_dir.join(wim_entry.path.rsplit('/').next().unwrap_or("install.wim"));
                     first
                 }
             }
         };
-        tracing::info!("WTG: applying {} (mounted ISO: {mounted_iso})", wim_path.display());
+        tracing::info!(
+            "WTG: applying {} (mounted ISO: {mounted_iso})",
+            wim_path.display()
+        );
 
         // 4. apply the image onto the NTFS volume (wimlib NTFS mode, like
         //    Rufus's WimApplyImage); keep the volume unmounted meanwhile
@@ -1715,7 +2013,12 @@ impl Engine {
         );
         result?;
         disk.file.sync_all()?;
-        progress(Progress { phase: "done".into(), done: 1, total: 1, message: "Windows To Go drive ready".into() });
+        progress(Progress {
+            phase: "done".into(),
+            done: 1,
+            total: 1,
+            message: "Windows To Go drive ready".into(),
+        });
         let _ = wim_size;
         Ok(())
     }
@@ -1729,10 +2032,13 @@ impl Engine {
         target: &str,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<()> {
-        let tool = find_tool("wimlib-imagex")
-            .ok_or_else(|| anyhow::anyhow!("wimlib-imagex not found — install the wimtools package"))?;
+        let tool = find_tool("wimlib-imagex").ok_or_else(|| {
+            anyhow::anyhow!("wimlib-imagex not found — install the wimtools package")
+        })?;
         progress(Progress {
-            phase: "wtg-apply".into(), done: 0, total: 0,
+            phase: "wtg-apply".into(),
+            done: 0,
+            total: 0,
             message: format!("Applying Windows image (index {index})..."),
         });
         // split WIMs: primary part + --ref for the remaining parts
@@ -1744,7 +2050,9 @@ impl Engine {
         ];
         if let Some(parent) = wim_path.parent() {
             if let Ok(rd) = std::fs::read_dir(parent) {
-                let stem = wim_path.file_name().map(|f| f.to_string_lossy().to_string())
+                let stem = wim_path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_default();
                 for e in rd.flatten() {
                     let n = e.file_name().to_string_lossy().to_string();
@@ -1765,7 +2073,9 @@ impl Engine {
                 Some(status) => {
                     if status.success() {
                         progress(Progress {
-                            phase: "wtg-apply".into(), done: 1, total: 1,
+                            phase: "wtg-apply".into(),
+                            done: 1,
+                            total: 1,
                             message: "Windows image applied".into(),
                         });
                         return Ok(());
@@ -1802,7 +2112,12 @@ impl Engine {
         if !gpt {
             // NTFS partition boot record: keep the BPB/$MFT pointers that
             // mkfs.ntfs wrote and overlay the ms-sys bootmgr loader code
-            progress(Progress { phase: "wtg-boot".into(), done: 0, total: 1, message: "Writing NTFS boot sector...".into() });
+            progress(Progress {
+                phase: "wtg-boot".into(),
+                done: 0,
+                total: 1,
+                message: "Writing NTFS boot sector...".into(),
+            });
             let mut bpb = [0u8; 0x54 - 0x0B];
             let mut disk = Disk::open(&dev.path)?;
             disk.read_at(prep.part_start_lba * 512 + 0x0B, &mut bpb)?;
@@ -1815,7 +2130,12 @@ impl Engine {
         let mnt = format!("/tmp/rufus-linux-wtg-{}", dev.name);
         std::fs::create_dir_all(&mnt)?;
         detach_mounts(&prep.part_dev);
-        progress(Progress { phase: "mount".into(), done: 0, total: 0, message: format!("Mounting {} at {mnt}", prep.part_dev) });
+        progress(Progress {
+            phase: "mount".into(),
+            done: 0,
+            total: 0,
+            message: format!("Mounting {} at {mnt}", prep.part_dev),
+        });
         mount_fs(&prep.part_dev, &mnt, FsKind::Ntfs)?;
 
         // ESP mount for the GPT layout
@@ -1846,9 +2166,15 @@ impl Engine {
                 .and_then(|mut f| iso9660::parse_iso(&mut f).ok());
             let entry_guid = random_guid_string();
             let boot_dev = if gpt {
-                BcdDevice::Gpt { disk_guid: prep.disk_guid, partition_guid: prep.part_guid }
+                BcdDevice::Gpt {
+                    disk_guid: prep.disk_guid,
+                    partition_guid: prep.part_guid,
+                }
             } else {
-                BcdDevice::Mbr { disk_signature: prep.disk_sig, partition_offset: prep.part_start_lba * 512 }
+                BcdDevice::Mbr {
+                    disk_signature: prep.disk_sig,
+                    partition_offset: prep.part_start_lba * 512,
+                }
             };
             let loader = if gpt {
                 "\\Windows\\system32\\winload.efi"
@@ -1860,9 +2186,11 @@ impl Engine {
             // verified in QEMU) and retarget its "Windows Setup" osloader
             // entry at our Windows partition. Fallback: build one from scratch.
             let iso_bcd_path = if gpt {
-                iso.as_ref().and_then(|iso| find_case_insensitive_path(iso, "efi/microsoft/boot/bcd"))
+                iso.as_ref()
+                    .and_then(|iso| find_case_insensitive_path(iso, "efi/microsoft/boot/bcd"))
             } else {
-                iso.as_ref().and_then(|iso| find_case_insensitive_path(iso, "boot/bcd"))
+                iso.as_ref()
+                    .and_then(|iso| find_case_insensitive_path(iso, "boot/bcd"))
             };
             let make_bcd = |loader: &str| -> Result<Vec<u8>> {
                 let iso_bcd_path = iso_bcd_path.clone();
@@ -1934,36 +2262,54 @@ impl Engine {
             if gpt {
                 // bootmgfw.efi from the applied image → ESP\EFI\Boot\bootx64.efi
                 let src = find_case_insensitive(&mnt_path, "Windows/Boot/EFI/bootmgfw.efi")
-                    .ok_or_else(|| anyhow::anyhow!("applied image lacks Windows/Boot/EFI/bootmgfw.efi"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("applied image lacks Windows/Boot/EFI/bootmgfw.efi")
+                    })?;
                 let esp_path = PathBuf::from(&esp_mnt);
                 std::fs::create_dir_all(esp_path.join("EFI/Boot"))?;
                 std::fs::create_dir_all(esp_path.join("EFI/Microsoft/Boot"))?;
                 std::fs::copy(&src, esp_path.join("EFI/Boot/bootx64.efi"))?;
                 std::fs::write(esp_path.join("EFI/Microsoft/Boot/BCD"), &bcd)?;
-                progress(Progress { phase: "wtg-boot".into(), done: 1, total: 2, message: "UEFI boot files written to the ESP".into() });
+                progress(Progress {
+                    phase: "wtg-boot".into(),
+                    done: 1,
+                    total: 2,
+                    message: "UEFI boot files written to the ESP".into(),
+                });
             } else {
                 // bootmgr at the volume root + \Boot\BCD (BIOS), plus the
                 // UEFI files bcdboot /f ALL would add for the uefi-ntfs path
                 let pcat = find_case_insensitive(&mnt_path, "Windows/Boot/PCAT/bootmgr")
-                    .ok_or_else(|| anyhow::anyhow!("applied image lacks Windows/Boot/PCAT/bootmgr"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("applied image lacks Windows/Boot/PCAT/bootmgr")
+                    })?;
                 std::fs::copy(&pcat, mnt_path.join("bootmgr"))?;
                 std::fs::create_dir_all(mnt_path.join("Boot"))?;
                 std::fs::write(mnt_path.join("Boot/BCD"), &bcd)?;
                 if let Some(bcd_efi) = bcd_efi {
                     let efi = find_case_insensitive(&mnt_path, "Windows/Boot/EFI/bootmgfw.efi")
-                        .ok_or_else(|| anyhow::anyhow!("applied image lacks Windows/Boot/EFI/bootmgfw.efi"))?;
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("applied image lacks Windows/Boot/EFI/bootmgfw.efi")
+                        })?;
                     std::fs::create_dir_all(mnt_path.join("EFI/Boot"))?;
                     std::fs::create_dir_all(mnt_path.join("EFI/Microsoft/Boot"))?;
                     std::fs::copy(&efi, mnt_path.join("EFI/Boot/bootx64.efi"))?;
                     std::fs::write(mnt_path.join("EFI/Microsoft/Boot/BCD"), &bcd_efi)?;
                 }
-                progress(Progress { phase: "wtg-boot".into(), done: 1, total: 2, message: "BIOS + UEFI boot files written".into() });
+                progress(Progress {
+                    phase: "wtg-boot".into(),
+                    done: 1,
+                    total: 2,
+                    message: "BIOS + UEFI boot files written".into(),
+                });
             }
 
             // WUE: unattend.xml goes to \Windows\Panther for Windows To Go
             if let Some(wue) = self.options.wue {
                 if wue.bypass_tpm {
-                    tracing::info!("TPM/SecureBoot bypass does not apply to Windows To Go — ignored");
+                    tracing::info!(
+                        "TPM/SecureBoot bypass does not apply to Windows To Go — ignored"
+                    );
                 }
                 self.apply_wtg_unattend(&mnt_path, &wue, progress)?;
             }
@@ -1992,7 +2338,11 @@ impl Engine {
     ) -> Result<()> {
         let username = std::env::var("USER").unwrap_or_else(|_| "user".into());
         let locale = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
-        let locale = locale.split('.').next().unwrap_or("en_US").replace('_', "-");
+        let locale = locale
+            .split('.')
+            .next()
+            .unwrap_or("en_US")
+            .replace('_', "-");
         let tz = std::fs::read_to_string("/etc/timezone")
             .map(|s| s.trim().to_string())
             .unwrap_or_else(|_| "UTC".into());
@@ -2000,7 +2350,12 @@ impl Engine {
         let panther = mnt.join("Windows").join("Panther");
         std::fs::create_dir_all(&panther)?;
         std::fs::write(panther.join("unattend.xml"), xml)?;
-        progress(Progress { phase: "wue".into(), done: 2, total: 2, message: "Windows unattend.xml written".into() });
+        progress(Progress {
+            phase: "wue".into(),
+            done: 2,
+            total: 2,
+            message: "Windows unattend.xml written".into(),
+        });
         Ok(())
     }
 
@@ -2016,7 +2371,11 @@ impl Engine {
     ) -> Result<()> {
         let username = std::env::var("USER").unwrap_or_else(|_| "user".into());
         let locale = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
-        let locale = locale.split('.').next().unwrap_or("en_US").replace('_', "-");
+        let locale = locale
+            .split('.')
+            .next()
+            .unwrap_or("en_US")
+            .replace('_', "-");
         let tz = std::fs::read_to_string("/etc/timezone")
             .map(|s| s.trim().to_string())
             .unwrap_or_else(|_| "UTC".into());
@@ -2024,7 +2383,12 @@ impl Engine {
         let panther = mnt.join("sources").join("$oem$").join("$$").join("Panther");
         std::fs::create_dir_all(&panther)?;
         std::fs::write(panther.join("unattend.xml"), xml)?;
-        progress(Progress { phase: "wue".into(), done: 1, total: 2, message: "Windows unattend.xml written".into() });
+        progress(Progress {
+            phase: "wue".into(),
+            done: 1,
+            total: 2,
+            message: "Windows unattend.xml written".into(),
+        });
         if wue.bypass_tpm {
             self.patch_boot_wim_labconfig(mnt, progress)?;
         }
@@ -2040,7 +2404,12 @@ impl Engine {
     ) -> Result<()> {
         let boot_wim = mnt.join("sources").join("boot.wim");
         if !boot_wim.is_file() {
-            progress(Progress { phase: "wue".into(), done: 2, total: 2, message: "WARNING: boot.wim not found — TPM bypass skipped".into() });
+            progress(Progress {
+                phase: "wue".into(),
+                done: 2,
+                total: 2,
+                message: "WARNING: boot.wim not found — TPM bypass skipped".into(),
+            });
             return Ok(());
         }
         let have = |tool: &str| {
@@ -2051,18 +2420,34 @@ impl Engine {
                 .unwrap_or(false)
         };
         if !have("wimlib-imagex") || !have("chntpw") {
-            progress(Progress { phase: "wue".into(), done: 2, total: 2, message: "WARNING: TPM bypass needs wimlib-imagex + chntpw — install them".into() });
+            progress(Progress {
+                phase: "wue".into(),
+                done: 2,
+                total: 2,
+                message: "WARNING: TPM bypass needs wimlib-imagex + chntpw — install them".into(),
+            });
             tracing::warn!("TPM/SecureBoot bypass skipped: wimlib-imagex and/or chntpw missing");
             return Ok(());
         }
-        progress(Progress { phase: "wue".into(), done: 2, total: 2, message: "Patching boot.wim LabConfig bypass keys...".into() });
+        progress(Progress {
+            phase: "wue".into(),
+            done: 2,
+            total: 2,
+            message: "Patching boot.wim LabConfig bypass keys...".into(),
+        });
         let tmp = std::env::temp_dir().join(format!("rufus-wim-{}", std::process::id()));
         std::fs::create_dir_all(&tmp)?;
         let boot_wim_s = boot_wim.to_string_lossy().to_string();
         let tmp_s = tmp.to_string_lossy().to_string();
         let _ = Command::new("wimlib-imagex")
-            .args(["extract", &boot_wim_s, "2",
-                   "/Windows/System32/config/SYSTEM", "--dest-dir", &tmp_s])
+            .args([
+                "extract",
+                &boot_wim_s,
+                "2",
+                "/Windows/System32/config/SYSTEM",
+                "--dest-dir",
+                &tmp_s,
+            ])
             .status()?;
         // chntpw: add HKLM\SYSTEM\Setup\LabConfig bypass DWORDs
         let script = "cd Microsoft\\Windows\\CurrentVersion\\Setup\nnk LabConfig\ncd LabConfig\nnv 3 v BypassTPMCheck\ned BypassTPMCheck\nd:0x00000001\nnv 3 v BypassRAMCheck\ned BypassRAMCheck\nd:0x00000001\nnv 3 v BypassSecureBootCheck\ned BypassSecureBootCheck\nd:0x00000001\nq\ny\n";
@@ -2078,19 +2463,31 @@ impl Engine {
             });
         match out {
             Ok(o) if o.status.success() => {
-                progress(Progress { phase: "wue".into(), done: 2, total: 2, message: "LabConfig bypass keys injected".into() });
+                progress(Progress {
+                    phase: "wue".into(),
+                    done: 2,
+                    total: 2,
+                    message: "LabConfig bypass keys injected".into(),
+                });
             }
             Ok(o) => {
-                tracing::warn!("chntpw returned {} — TPM bypass may not have applied", o.status);
+                tracing::warn!(
+                    "chntpw returned {} — TPM bypass may not have applied",
+                    o.status
+                );
             }
             Err(e) => {
                 tracing::warn!("chntpw failed: {e}");
             }
         }
         let _ = Command::new("wimlib-imagex")
-            .args(["update", &boot_wim_s, "2",
-                   "--delete=/Windows/System32/config/SYSTEM",
-                   &format!("--add={tmp_s}/SYSTEM=/Windows/System32/config/SYSTEM")])
+            .args([
+                "update",
+                &boot_wim_s,
+                "2",
+                "--delete=/Windows/System32/config/SYSTEM",
+                &format!("--add={tmp_s}/SYSTEM=/Windows/System32/config/SYSTEM"),
+            ])
             .status()?;
         let _ = std::fs::remove_dir_all(&tmp);
         Ok(())
@@ -2103,15 +2500,27 @@ impl Engine {
         if self.options.fs != FsKind::Fat32 {
             return Ok(());
         }
-        for name in ["sources/install.wim", "sources/install.esd", "Sources/Install.wim", "Sources/Install.esd"] {
+        for name in [
+            "sources/install.wim",
+            "sources/install.esd",
+            "Sources/Install.wim",
+            "Sources/Install.esd",
+        ] {
             let p = mnt.join(name);
-            if !p.exists() { continue; }
+            if !p.exists() {
+                continue;
+            }
             let size = std::fs::metadata(&p)?.len();
             let limit = 4u64 << 30; // 4 GiB safe limit
             if size <= limit {
                 return Ok(());
             }
-            progress(Progress { phase: "wim".into(), done: 0, total: size, message: format!("Splitting {name} for FAT32...") });
+            progress(Progress {
+                phase: "wim".into(),
+                done: 0,
+                total: size,
+                message: format!("Splitting {name} for FAT32..."),
+            });
             // wimlib-imagex split: install.wim -> install.swm, install2.swm, ...
             // (the names Windows setup looks for)
             let out_pattern = p.with_extension("swm");
@@ -2124,7 +2533,12 @@ impl Engine {
             match status {
                 Ok(s) if s.success() => {
                     let _ = std::fs::remove_file(&p);
-                    progress(Progress { phase: "wim".into(), done: size, total: size, message: "WIM split complete".into() });
+                    progress(Progress {
+                        phase: "wim".into(),
+                        done: size,
+                        total: size,
+                        message: "WIM split complete".into(),
+                    });
                 }
                 _ => {
                     tracing::warn!("wimlib-imagex split failed or not installed; install.wim >4GiB won't fit FAT32");
@@ -2146,24 +2560,50 @@ impl Engine {
         // UEFI: ensure /EFI/BOOT/BOOTX64.EFI exists; if ISO only has bootia32 etc., note.
         let efi_boot = mnt.join("EFI/BOOT");
         if efi_boot.exists() {
-            progress(Progress { phase: "boot".into(), done: 1, total: 1, message: "UEFI boot files present".into() });
+            progress(Progress {
+                phase: "boot".into(),
+                done: 1,
+                total: 1,
+                message: "UEFI boot files present".into(),
+            });
         } else {
-            progress(Progress { phase: "boot".into(), done: 0, total: 1, message: "No UEFI boot files in image".into() });
+            progress(Progress {
+                phase: "boot".into(),
+                done: 0,
+                total: 1,
+                message: "No UEFI boot files in image".into(),
+            });
         }
         // BIOS boot: prefer GRUB2 when ISO ships grub.cfg+core.img, else syslinux.
         // BIOS int13 cannot read 4096-byte sectors — skip on 4Kn devices.
-        let has_grub = iso.entries.iter().any(|e| {
-            e.path.eq_ignore_ascii_case("boot/grub/grub.cfg")
-        });
+        let has_grub = iso
+            .entries
+            .iter()
+            .any(|e| e.path.eq_ignore_ascii_case("boot/grub/grub.cfg"));
         if target.sector_size != 512 && !self.options.efi_only {
-            progress(Progress { phase: "boot".into(), done: 0, total: 1, message: format!("BIOS boot skipped ({}-byte sectors) — UEFI only", target.sector_size) });
+            progress(Progress {
+                phase: "boot".into(),
+                done: 0,
+                total: 1,
+                message: format!(
+                    "BIOS boot skipped ({}-byte sectors) — UEFI only",
+                    target.sector_size
+                ),
+            });
         } else if !self.options.efi_only {
             if has_grub {
                 self.install_grub2(mnt, target.part_dev, target.part_start_lba, progress)?;
             } else if syslinux_dir {
                 self.install_syslinux(mnt, target.part_dev, target.part_start_lba, progress)?;
             } else {
-                progress(Progress { phase: "boot".into(), done: 0, total: 1, message: "No syslinux/grub files in image; BIOS boot may not work (UEFI still OK)".into() });
+                progress(Progress {
+                    phase: "boot".into(),
+                    done: 0,
+                    total: 1,
+                    message:
+                        "No syslinux/grub files in image; BIOS boot may not work (UEFI still OK)"
+                            .into(),
+                });
             }
         }
         Ok(())
@@ -2203,7 +2643,10 @@ impl Engine {
         // 1. locate core.img's sectors on the volume
         let mut lbas = map_volume_file(part_dev, CORE_REL)?;
         if lbas.len() as u64 != core_sectors {
-            bail!("core.img sector map mismatch ({} != {core_sectors})", lbas.len());
+            bail!(
+                "core.img sector map mismatch ({} != {core_sectors})",
+                lbas.len()
+            );
         }
 
         // 2. patch the diskboot blocklists inside the file (same-size
@@ -2229,7 +2672,12 @@ impl Engine {
         let mut boot = GRUB2_BOOT.to_vec();
         bootpatch::patch_grub_boot(&mut boot, &vbr, part_start_lba + lbas[0])?;
         write_partition_sector(part_dev, 0, &boot)?;
-        progress(Progress { phase: "boot".into(), done: 1, total: 1, message: "GRUB2 installed (BIOS boot)".into() });
+        progress(Progress {
+            phase: "boot".into(),
+            done: 1,
+            total: 1,
+            message: "GRUB2 installed (BIOS boot)".into(),
+        });
         Ok(())
     }
 
@@ -2250,8 +2698,7 @@ impl Engine {
     ) -> Result<()> {
         // syslinux 6.04 pair; the v4 assets are kept for a future fallback
         let ldlinux = bootpatch::build_ldlinux_file(LDLINUX_V6_SYS);
-        std::fs::write(mnt.join("ldlinux.sys"), &ldlinux)
-            .context("failed to write ldlinux.sys")?;
+        std::fs::write(mnt.join("ldlinux.sys"), &ldlinux).context("failed to write ldlinux.sys")?;
 
         // config: find ISO's syslinux/isolinux cfg and mirror to root
         let cfg_candidates = [
@@ -2298,7 +2745,10 @@ TIMEOUT 50
         let nsect = ldlinux.len() / 512;
         let lbas = map_volume_file(part_dev, "ldlinux.sys")?;
         if lbas.len() != nsect {
-            bail!("ldlinux.sys sector map mismatch ({} != {nsect})", lbas.len());
+            bail!(
+                "ldlinux.sys sector map mismatch ({} != {nsect})",
+                lbas.len()
+            );
         }
 
         // patch the loader in place (same-size rewrite keeps the clusters)
@@ -2328,7 +2778,12 @@ TIMEOUT 50
             patch.sect1ptr1,
         )?;
         write_partition_sector(part_dev, 0, &vbr)?;
-        progress(Progress { phase: "boot".into(), done: 1, total: 1, message: "syslinux VBR installed (BIOS boot)".into() });
+        progress(Progress {
+            phase: "boot".into(),
+            done: 1,
+            total: 1,
+            message: "syslinux VBR installed (BIOS boot)".into(),
+        });
         Ok(())
     }
 
@@ -2338,7 +2793,11 @@ TIMEOUT 50
     /// device in 512 KiB blocks (DESTROYING all data), then reads it back and
     /// compares block by block to detect unreliable media. Aborts after
     /// BB_THRESHOLD bad blocks, like the original.
-    fn badblocks_test(&self, io: &mut dyn BlockIo, progress: &mut dyn FnMut(Progress)) -> Result<()> {
+    fn badblocks_test(
+        &self,
+        io: &mut dyn BlockIo,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<()> {
         let mode = self.options.bb_test;
         let passes = mode.passes();
         let patterns = mode.patterns();
@@ -2351,7 +2810,10 @@ TIMEOUT 50
             phase: "badblocks".into(),
             done: 0,
             total,
-            message: format!("Bad Blocks: Checking from block 0 to {} (1 block = 512 KB)", last_block - 1),
+            message: format!(
+                "Bad Blocks: Checking from block 0 to {} (1 block = 512 KB)",
+                last_block - 1
+            ),
         });
 
         // sorted, unique bad blocks list (bb_list in the original)
@@ -2367,7 +2829,9 @@ TIMEOUT 50
             // -------- write pass: fill the media with the test pattern --------
             fill_pattern(&mut write_buf, pattern);
             progress(Progress {
-                phase: "badblocks".into(), done: base, total,
+                phase: "badblocks".into(),
+                done: base,
+                total,
                 message: format!("Bad Blocks: Writing test pattern 0x{pattern:02X}"),
             });
             let mut blk = 0u64;
@@ -2381,7 +2845,9 @@ TIMEOUT 50
                     for b in blk..blk + tryout {
                         // bb_output() dedupes: a block already in the list is
                         // not counted again
-                        if io.write_at(b * BB_BLOCK_SIZE, &write_buf[..blk_sz]).is_err()
+                        if io
+                            .write_at(b * BB_BLOCK_SIZE, &write_buf[..blk_sz])
+                            .is_err()
                             && record_bad_block(&mut bb_list, b)
                         {
                             num_write += 1;
@@ -2390,21 +2856,32 @@ TIMEOUT 50
                 }
                 blk += tryout;
                 if bb_list.len() >= BB_THRESHOLD {
-                    bail!("Too many bad blocks, aborting test ({} bad blocks found)", bb_list.len());
+                    bail!(
+                        "Too many bad blocks, aborting test ({} bad blocks found)",
+                        bb_list.len()
+                    );
                 }
                 progress(Progress {
                     phase: "badblocks".into(),
                     done: base + 500 * blk / last_block,
                     total,
-                    message: format!("Bad Blocks: Write pass {}/{} - {:.2}% ({}/{}/{} errors)",
-                        pass + 1, passes, 100.0 * blk as f64 / last_block as f64,
-                        num_read, num_write, num_corrupt),
+                    message: format!(
+                        "Bad Blocks: Write pass {}/{} - {:.2}% ({}/{}/{} errors)",
+                        pass + 1,
+                        passes,
+                        100.0 * blk as f64 / last_block as f64,
+                        num_read,
+                        num_write,
+                        num_corrupt
+                    ),
                 });
             }
 
             // -------- read pass: read back and compare --------
             progress(Progress {
-                phase: "badblocks".into(), done: base + 500, total,
+                phase: "badblocks".into(),
+                done: base + 500,
+                total,
                 message: "Bad Blocks: Reading and comparing".into(),
             });
             let mut blk = 0u64;
@@ -2414,7 +2891,10 @@ TIMEOUT 50
                 let n = (tryout * BB_BLOCK_SIZE) as usize;
                 if io.read_at(blk * BB_BLOCK_SIZE, &mut read_buf[..n]).is_err() {
                     for b in blk..blk + tryout {
-                        if io.read_at(b * BB_BLOCK_SIZE, &mut read_buf[..blk_sz]).is_err() {
+                        if io
+                            .read_at(b * BB_BLOCK_SIZE, &mut read_buf[..blk_sz])
+                            .is_err()
+                        {
                             if record_bad_block(&mut bb_list, b) {
                                 num_read += 1;
                             }
@@ -2438,23 +2918,39 @@ TIMEOUT 50
                 }
                 blk += tryout;
                 if bb_list.len() >= BB_THRESHOLD {
-                    bail!("Too many bad blocks, aborting test ({} bad blocks found)", bb_list.len());
+                    bail!(
+                        "Too many bad blocks, aborting test ({} bad blocks found)",
+                        bb_list.len()
+                    );
                 }
                 progress(Progress {
                     phase: "badblocks".into(),
                     done: base + 500 + 500 * blk / last_block,
                     total,
-                    message: format!("Bad Blocks: Read pass {}/{} - {:.2}% ({}/{}/{} errors)",
-                        pass + 1, passes, 100.0 * blk as f64 / last_block as f64,
-                        num_read, num_write, num_corrupt),
+                    message: format!(
+                        "Bad Blocks: Read pass {}/{} - {:.2}% ({}/{}/{} errors)",
+                        pass + 1,
+                        passes,
+                        100.0 * blk as f64 / last_block as f64,
+                        num_read,
+                        num_write,
+                        num_corrupt
+                    ),
                 });
             }
         }
 
         progress(Progress {
-            phase: "badblocks".into(), done: total, total,
-            message: format!("Bad Blocks: Check completed, {} bad block(s) found. ({}/{}/{} errors)",
-                bb_list.len(), num_read, num_write, num_corrupt),
+            phase: "badblocks".into(),
+            done: total,
+            total,
+            message: format!(
+                "Bad Blocks: Check completed, {} bad block(s) found. ({}/{}/{} errors)",
+                bb_list.len(),
+                num_read,
+                num_write,
+                num_corrupt
+            ),
         });
         if !bb_list.is_empty() {
             for &b in bb_list.iter().take(50) {
@@ -2529,7 +3025,10 @@ fn rewrite_same_size(path: &Path, data: &[u8]) -> Result<()> {
 /// Write one 512-byte sector at LBA `sector` of the partition (boot sectors).
 fn write_partition_sector(part_dev: &str, sector: u64, buf: &[u8]) -> Result<()> {
     if buf.len() != 512 {
-        bail!("write_partition_sector: expected 512 bytes, got {}", buf.len());
+        bail!(
+            "write_partition_sector: expected 512 bytes, got {}",
+            buf.len()
+        );
     }
     let mut part = crate::disk::open_partition(part_dev)?;
     part.seek(SeekFrom::Start(sector * 512))?;
@@ -2597,8 +3096,7 @@ fn detach_mounts(prefix: &str) {
             let src = line.split_whitespace().next().unwrap_or("");
             let is_ours = src == prefix
                 || (src.starts_with(prefix)
-                    && src[prefix.len()..]
-                        .starts_with(|c: char| c.is_ascii_digit() || c == 'p'));
+                    && src[prefix.len()..].starts_with(|c: char| c.is_ascii_digit() || c == 'p'));
             if is_ours {
                 // a real unmount flushes; keep the lazy detach as fallback
                 let ok = Command::new("umount")
@@ -2644,14 +3142,17 @@ mod tests {
         compat_sectors: u64,
         gpt: bool,
     ) -> crate::error::Result<Layout> {
-        compute_layout(disk_sectors, LayoutReq {
-            part_start_lba: 2048,
-            uefi_ntfs_sectors,
-            persist_sectors,
-            compat_sectors,
-            track_sectors: 63,
-            gpt,
-        })
+        compute_layout(
+            disk_sectors,
+            LayoutReq {
+                part_start_lba: 2048,
+                uefi_ntfs_sectors,
+                persist_sectors,
+                compat_sectors,
+                track_sectors: 63,
+                gpt,
+            },
+        )
     }
 
     #[test]
@@ -2812,9 +3313,18 @@ mod tests {
         for sel in 2..=4 {
             assert_eq!(BadBlocksTest::from_sel(sel).passes(), 4);
         }
-        assert_eq!(BadBlocksTest::from_sel(2).patterns(), &[&[0x00, 0xff, 0x55, 0xaa]]);
-        assert_eq!(BadBlocksTest::from_sel(3).patterns(), &[&[0x00, 0xff, 0x33, 0xcc]]);
-        assert_eq!(BadBlocksTest::from_sel(4).patterns(), &[&[0x00, 0xff, 0x1c71c7, 0xe38e38]]);
+        assert_eq!(
+            BadBlocksTest::from_sel(2).patterns(),
+            &[&[0x00, 0xff, 0x55, 0xaa]]
+        );
+        assert_eq!(
+            BadBlocksTest::from_sel(3).patterns(),
+            &[&[0x00, 0xff, 0x33, 0xcc]]
+        );
+        assert_eq!(
+            BadBlocksTest::from_sel(4).patterns(),
+            &[&[0x00, 0xff, 0x1c71c7, 0xe38e38]]
+        );
         assert_eq!(BB_PASSES_NAMES.len(), 5);
         assert_eq!(BB_PASSES_NAMES[0], "1 pass");
         assert_eq!(BB_PASSES_NAMES[4], "4 passes for TLC NAND");
@@ -2865,15 +3375,34 @@ mod tests {
     #[test]
     fn find_windows_wim_is_case_insensitive() {
         let iso = empty_iso(vec![
-            iso9660::IsoEntry { path: "boot/bcd".into(), is_dir: false, extent_lba: 0, size: 0, mtime: 0 },
-            iso9660::IsoEntry { path: "SOURCES/INSTALL.WIM".into(), is_dir: false, extent_lba: 0, size: 10, mtime: 0 },
+            iso9660::IsoEntry {
+                path: "boot/bcd".into(),
+                is_dir: false,
+                extent_lba: 0,
+                size: 0,
+                mtime: 0,
+            },
+            iso9660::IsoEntry {
+                path: "SOURCES/INSTALL.WIM".into(),
+                is_dir: false,
+                extent_lba: 0,
+                size: 10,
+                mtime: 0,
+            },
         ]);
         let w = find_windows_wim(&iso).expect("wim must be found");
         assert_eq!(w.path, "SOURCES/INSTALL.WIM");
-        assert!(find_windows_wim(&empty_iso(vec![
-            iso9660::IsoEntry { path: "sources/setup.exe".into(), is_dir: false, extent_lba: 0, size: 1, mtime: 0 },
-        ]))
-        .is_none(), "no install.wim → None");
+        assert!(
+            find_windows_wim(&empty_iso(vec![iso9660::IsoEntry {
+                path: "sources/setup.exe".into(),
+                is_dir: false,
+                extent_lba: 0,
+                size: 1,
+                mtime: 0
+            },]))
+            .is_none(),
+            "no install.wim → None"
+        );
     }
 
     #[test]
@@ -2885,7 +3414,9 @@ mod tests {
         assert_eq!(list[0].name, "Windows 11 Home");
         assert_eq!(list[1].name, "Windows 11 Pro");
         // DISPLAYNAME wins over NAME (Rufus's fallback order)
-        let l2 = parse_wim_xml(br#"<IMAGE INDEX="1"><NAME>N</NAME><DISPLAYNAME>Display N</DISPLAYNAME></IMAGE>"#);
+        let l2 = parse_wim_xml(
+            br#"<IMAGE INDEX="1"><NAME>N</NAME><DISPLAYNAME>Display N</DISPLAYNAME></IMAGE>"#,
+        );
         assert_eq!(l2[0].name, "Display N");
         // UTF-16LE XML (some WIMs store the metadata that way)
         let mut u16xml = vec![0xFF, 0xFE];
@@ -2906,8 +3437,15 @@ mod tests {
         // the ms-sys NTFS boot record spans the 8-sector $Boot area
         assert_eq!(br.len(), 0x54 + NTFS_BR_0X54.len());
         assert_eq!(br.len(), 4136);
-        assert_eq!(&br[0x00..0x0B], &[0xEB, 0x52, 0x90, b'N', b'T', b'F', b'S', b' ', b' ', b' ', b' ']);
-        assert_eq!(&br[0x0B..0x54], &bpb[..], "BPB written by mkfs.ntfs must be kept verbatim");
+        assert_eq!(
+            &br[0x00..0x0B],
+            &[0xEB, 0x52, 0x90, b'N', b'T', b'F', b'S', b' ', b' ', b' ', b' ']
+        );
+        assert_eq!(
+            &br[0x0B..0x54],
+            &bpb[..],
+            "BPB written by mkfs.ntfs must be kept verbatim"
+        );
         assert_eq!(&br[0x1FE..0x200], &[0x55, 0xAA], "boot signature");
     }
 
@@ -2985,13 +3523,22 @@ mod tests {
     #[test]
     fn badblocks_healthy_media_passes_and_writes_pattern() {
         let mut io = MockMedia::new(8);
-        let eng = Engine::new(Options { bb_test: BadBlocksTest::TwoPasses, ..Default::default() });
+        let eng = Engine::new(Options {
+            bb_test: BadBlocksTest::TwoPasses,
+            ..Default::default()
+        });
         let mut msgs = 0;
-        eng.badblocks_test(&mut io, &mut |_| { msgs += 1; }).unwrap();
+        eng.badblocks_test(&mut io, &mut |_| {
+            msgs += 1;
+        })
+        .unwrap();
         assert!(msgs > 0);
         // the final pass's pattern (0xaa) must cover the whole device
         for b in 0..8 {
-            assert!(io.stored[&b].iter().all(|&x| x == 0xaa), "block {b} not patterned");
+            assert!(
+                io.stored[&b].iter().all(|&x| x == 0xaa),
+                "block {b} not patterned"
+            );
         }
     }
 
@@ -3001,7 +3548,10 @@ mod tests {
         io.bad_write = vec![3];
         io.bad_read = vec![5];
         io.corrupt = vec![7];
-        let eng = Engine::new(Options { bb_test: BadBlocksTest::OnePass, ..Default::default() });
+        let eng = Engine::new(Options {
+            bb_test: BadBlocksTest::OnePass,
+            ..Default::default()
+        });
         let err = eng.badblocks_test(&mut io, &mut |_| {}).unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("3 bad block(s) found"), "{msg}");
@@ -3015,7 +3565,10 @@ mod tests {
         let mut io = MockMedia::new(blocks);
         io.bad_write = (0..blocks).collect();
         io.bad_read = (0..blocks).collect();
-        let eng = Engine::new(Options { bb_test: BadBlocksTest::OnePass, ..Default::default() });
+        let eng = Engine::new(Options {
+            bb_test: BadBlocksTest::OnePass,
+            ..Default::default()
+        });
         let err = eng.badblocks_test(&mut io, &mut |_| {}).unwrap_err();
         assert!(format!("{err:#}").contains("Too many bad blocks"));
     }
@@ -3043,7 +3596,10 @@ mod mbr_id_tests {
         // longer than the 11-byte boot-sector field
         assert_eq!(sanitize_fat_label("ubuntu-24.04.1-desktop"), "UBUNTU-24.0");
         // non-ASCII (UTF-8) bytes cannot live in a FAT label — underscored
-        assert_eq!(sanitize_fat_label("\u{627}\u{644}\u{627}\u{633}\u{645}"), "_____");
+        assert_eq!(
+            sanitize_fat_label("\u{627}\u{644}\u{627}\u{633}\u{645}"),
+            "_____"
+        );
         // trailing spaces are trimmed; an all-invalid label still fits 11
         assert_eq!(sanitize_fat_label("abc   "), "ABC");
         assert_eq!(sanitize_fat_label("").len(), 0);
@@ -3091,7 +3647,10 @@ mod mbr_id_tests {
         // label + icon line, and autorun.ico next to it
         let dir = std::env::temp_dir().join(format!("rufus-autorun-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let eng = Engine::new(Options { fs_label: "MY_STICK".into(), ..Default::default() });
+        let eng = Engine::new(Options {
+            fs_label: "MY_STICK".into(),
+            ..Default::default()
+        });
         eng.write_autorun_files(&dir).unwrap();
         let inf = std::fs::read(dir.join("autorun.inf")).unwrap();
         assert_eq!(&inf[..2], &[0xFF, 0xFE]); // BOM
@@ -3104,7 +3663,10 @@ mod mbr_id_tests {
         assert!(text.contains("label = MY_STICK"), "{text:?}");
         assert!(text.contains("\r\n")); // DOS line endings
         assert!(text.starts_with("; Created by rufus-linux"));
-        assert_eq!(std::fs::read(dir.join("autorun.ico")).unwrap(), AUTORUN_ICON);
+        assert_eq!(
+            std::fs::read(dir.join("autorun.ico")).unwrap(),
+            AUTORUN_ICON
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -3125,7 +3687,10 @@ mod mbr_id_tests {
     fn autorun_disabled_writes_nothing() {
         let dir = std::env::temp_dir().join(format!("rufus-autorun-off-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let eng = Engine::new(Options { autorun: false, ..Default::default() });
+        let eng = Engine::new(Options {
+            autorun: false,
+            ..Default::default()
+        });
         eng.write_autorun_files(&dir).unwrap();
         assert!(!dir.join("autorun.inf").exists());
         assert!(!dir.join("autorun.ico").exists());

@@ -85,7 +85,14 @@ fn http_get_text(url: &str, extra: &[&str], jar: Option<&Path>) -> Result<String
 /// Content-Length of the final redirect target (best-effort, HEAD request).
 pub fn content_length(url: &str) -> Option<u64> {
     let out = Command::new("curl")
-        .args(["-sS", "-I", "-L", "--max-time=30", "--user-agent", USER_AGENT])
+        .args([
+            "-sS",
+            "-I",
+            "-L",
+            "--max-time=30",
+            "--user-agent",
+            USER_AGENT,
+        ])
         .arg(url)
         .output()
         .ok()?;
@@ -309,7 +316,11 @@ pub fn default_arch_index(links: &[WinLink]) -> usize {
 /// Language to preselect from the system locale (Fido Select-Language,
 /// simplified to a two-letter prefix match).
 pub fn default_lang_index(langs: &[WinLang], sys_locale: &str) -> usize {
-    let sys = sys_locale.split(['_', '.', '-']).next().unwrap_or("").to_lowercase();
+    let sys = sys_locale
+        .split(['_', '.', '-'])
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
     if sys.is_empty() {
         return 0;
     }
@@ -367,7 +378,8 @@ fn msft_preflight(session: &str, jar: &Path) -> Result<()> {
     )?;
     let mdt = String::from_utf8_lossy(&mdt);
     let w = extract_w(&mdt).ok_or_else(|| anyhow!("could not extract ov-df 'w' data"))?;
-    let rticks = extract_rticks(&mdt).ok_or_else(|| anyhow!("could not extract ov-df 'rticks' data"))?;
+    let rticks =
+        extract_rticks(&mdt).ok_or_else(|| anyhow!("could not extract ov-df 'rticks' data"))?;
     http_get(
         &format!(
             "https://ov-df.microsoft.com/?session_id={session}&CustomerId={MSFT_INSTANCE_ID}&PageId=si&w={w}&mdt={}&rticks={rticks}",
@@ -430,7 +442,8 @@ pub fn win_fetch_langs(ids: &[u32], tmpdir: &Path) -> Result<Vec<WinLang>> {
                 Err(e) => last_err = format!("{e:#}"),
             }
         }
-        let body = body.ok_or_else(|| anyhow!("could not retrieve languages from the server: {last_err}"))?;
+        let body = body
+            .ok_or_else(|| anyhow!("could not retrieve languages from the server: {last_err}"))?;
         let v: serde_json::Value = serde_json::from_slice(&body)
             .map_err(|e| anyhow!("unexpected response from the Microsoft server: {e}"))?;
         if let Some(e) = json_first_error(&v) {
@@ -689,12 +702,23 @@ pub fn resolve_target(t: &IsoTarget) -> Result<IsoResolved> {
         IsoTarget::Fixed { url, sums } => {
             let name = url_file_name(url);
             let sha256 = sums.and_then(|s| fetch_sha256(s, &name, url));
-            Ok(IsoResolved { url: url.into(), file_name: name, sha256 })
+            Ok(IsoResolved {
+                url: url.into(),
+                file_name: name,
+                sha256,
+            })
         }
-        IsoTarget::PickSums { sums_url, must, skip } => {
+        IsoTarget::PickSums {
+            sums_url,
+            must,
+            skip,
+        } => {
             let text = http_get_text(sums_url, &[], None)?;
             let (name, hash) = pick_sums(&text, must, skip).ok_or_else(|| {
-                anyhow!("no matching image found in {} — the distro's layout may have changed", sums_url)
+                anyhow!(
+                    "no matching image found in {} — the distro's layout may have changed",
+                    sums_url
+                )
             })?;
             Ok(IsoResolved {
                 url: format!("{}{}", dir_base(sums_url), name),
@@ -702,14 +726,26 @@ pub fn resolve_target(t: &IsoTarget) -> Result<IsoResolved> {
                 sha256: Some(hash),
             })
         }
-        IsoTarget::PickDir { dir_url, must, skip, sums } => {
+        IsoTarget::PickDir {
+            dir_url,
+            must,
+            skip,
+            sums,
+        } => {
             let text = http_get_text(dir_url, &[], None)?;
             let name = pick_dir_name(&text, must, skip).ok_or_else(|| {
-                anyhow!("no matching image found in {} — the distro's layout may have changed", dir_url)
+                anyhow!(
+                    "no matching image found in {} — the distro's layout may have changed",
+                    dir_url
+                )
             })?;
             let url = format!("{}{}", dir_base(dir_url), name);
             let sha256 = sums.and_then(|s| fetch_sha256(s, &name, &url));
-            Ok(IsoResolved { url, file_name: name, sha256 })
+            Ok(IsoResolved {
+                url,
+                file_name: name,
+                sha256,
+            })
         }
     }
 }
@@ -722,7 +758,8 @@ fn parse_sums(text: &str) -> Vec<(String, String)> {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("SHA256 (") {
             // Fedora CHECKSUM format: SHA256 (name) = hash
-            if let (Some(name), Some(hash)) = (rest.split(") = ").next(), rest.rsplit("= ").next()) {
+            if let (Some(name), Some(hash)) = (rest.split(") = ").next(), rest.rsplit("= ").next())
+            {
                 let name = name.trim();
                 let hash = hash.trim().to_lowercase();
                 if name.len() == 64 && hex_ok(name) {
@@ -757,12 +794,9 @@ fn hex_ok(s: &str) -> bool {
 
 /// Pick a sums entry whose name matches must/skip.
 fn pick_sums(text: &str, must: &[&str], skip: &[&str]) -> Option<(String, String)> {
-    parse_sums(text)
-        .into_iter()
-        .find(|(name, _)| {
-            name.to_lowercase().contains_all_ci(must)
-                && !name.to_lowercase().contains_any_ci(skip)
-        })
+    parse_sums(text).into_iter().find(|(name, _)| {
+        name.to_lowercase().contains_all_ci(must) && !name.to_lowercase().contains_any_ci(skip)
+    })
 }
 
 trait ContainsCi {
@@ -904,7 +938,11 @@ pub fn download_iso(
                 bail!(
                     "download failed after {}: {}",
                     humantime_s(started.elapsed()),
-                    if err.is_empty() { "curl error".to_string() } else { err }
+                    if err.is_empty() {
+                        "curl error".to_string()
+                    } else {
+                        err
+                    }
                 );
             }
             break;
@@ -963,7 +1001,9 @@ mod tests {
         let h1 = "1a".repeat(32);
         let h2 = "2b".repeat(32);
         let h3 = "3c".repeat(32);
-        let standard = format!("{h1}  ubuntu-24.04.3-desktop-amd64.iso\n{h2} *ubuntu-24.04.3-live-server-amd64.iso\n");
+        let standard = format!(
+            "{h1}  ubuntu-24.04.3-desktop-amd64.iso\n{h2} *ubuntu-24.04.3-live-server-amd64.iso\n"
+        );
         let v = parse_sums(&standard);
         assert_eq!(v.len(), 2);
         assert_eq!(v[0].1, h1);
@@ -1007,7 +1047,8 @@ mod tests {
                     <a href=\"Fedora-Workstation-44-1.2-x86_64-live.iso\">..</a>\n\
                     <a href=\"Fedora-Workstation-44-1.2-x86_64-CHECKSUM\">..</a>\n\
                     <a href=\"Fedora-Workstation-44-1.2-aarch64-live.iso\">..</a>\n";
-        let name = pick_dir_name(html, &["Workstation", "x86_64"], &["CHECKSUM", "aarch64"]).unwrap();
+        let name =
+            pick_dir_name(html, &["Workstation", "x86_64"], &["CHECKSUM", "aarch64"]).unwrap();
         assert_eq!(name, "Fedora-Workstation-44-1.2-x86_64-live.iso");
 
         let pop = "\"pop-os_24.04_amd64_nvidia_5.iso\" \"pop-os_24.04_amd64_intel_6.iso\"";
@@ -1057,9 +1098,18 @@ mod tests {
         assert_eq!(arch_from_type(1), "x64");
         assert_eq!(arch_from_type(2), "ARM64");
         let links = vec![
-            WinLink { arch: "x64".into(), url: "u1".into() },
-            WinLink { arch: "ARM64".into(), url: "u2".into() },
-            WinLink { arch: "x64".into(), url: "u3".into() },
+            WinLink {
+                arch: "x64".into(),
+                url: "u1".into(),
+            },
+            WinLink {
+                arch: "ARM64".into(),
+                url: "u2".into(),
+            },
+            WinLink {
+                arch: "x64".into(),
+                url: "u3".into(),
+            },
         ];
         let dd = dedupe_archs(links);
         assert_eq!(dd.len(), 2);
@@ -1070,9 +1120,21 @@ mod tests {
     #[test]
     fn default_lang_matches_system_locale_prefix() {
         let langs = vec![
-            WinLang { name: "en-us".into(), display: "English".into(), skus: vec![] },
-            WinLang { name: "ar-sa".into(), display: "Arabic".into(), skus: vec![] },
-            WinLang { name: "fr-fr".into(), display: "French".into(), skus: vec![] },
+            WinLang {
+                name: "en-us".into(),
+                display: "English".into(),
+                skus: vec![],
+            },
+            WinLang {
+                name: "ar-sa".into(),
+                display: "Arabic".into(),
+                skus: vec![],
+            },
+            WinLang {
+                name: "fr-fr".into(),
+                display: "French".into(),
+                skus: vec![],
+            },
         ];
         assert_eq!(default_lang_index(&langs, "ar_EG.UTF-8"), 1);
         assert_eq!(default_lang_index(&langs, "en_US.UTF-8"), 0);
@@ -1114,7 +1176,9 @@ mod tests {
             for v in d.variants {
                 match v.target {
                     IsoTarget::Fixed { url, .. } => assert!(url.starts_with("https://")),
-                    IsoTarget::PickSums { sums_url, .. } => assert!(sums_url.starts_with("https://")),
+                    IsoTarget::PickSums { sums_url, .. } => {
+                        assert!(sums_url.starts_with("https://"))
+                    }
                     IsoTarget::PickDir { dir_url, .. } => assert!(dir_url.starts_with("https://")),
                 }
             }

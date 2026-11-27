@@ -31,9 +31,9 @@ pub struct IsoImage {
 
 #[derive(Debug, Clone)]
 pub struct BootImage {
-    pub platform: u8,    // 0=x86, 1=PPC, 2=Mac, 0xEF=UEFI
+    pub platform: u8, // 0=x86, 1=PPC, 2=Mac, 0xEF=UEFI
     pub bootable: bool,
-    pub boot_media: u8,  // 0=no emulation, 1=1.2M, 2=1.44M, 3=2.88M, 4=HD
+    pub boot_media: u8, // 0=no emulation, 1=1.2M, 2=1.44M, 3=2.88M, 4=HD
     pub load_segment: u16,
     pub system_type: u8,
     /// virtual size in 512-byte sectors; 0 = whole image file
@@ -97,7 +97,9 @@ pub fn parse_dir_record(buf: &[u8]) -> Result<Option<DirRecord<'_>>> {
         flags,
         name,
         system_use: &buf[su_start..len],
-        rec_date: [buf[18], buf[19], buf[20], buf[21], buf[22], buf[23], buf[24]],
+        rec_date: [
+            buf[18], buf[19], buf[20], buf[21], buf[22], buf[23], buf[24],
+        ],
     }))
 }
 
@@ -153,7 +155,11 @@ pub fn rock_ridge_name(su: &[u8]) -> Option<String> {
         }
         i += l;
     }
-    if collecting { Some(name) } else { None }
+    if collecting {
+        Some(name)
+    } else {
+        None
+    }
 }
 
 /// Decode ISO9660 file identifier to a name.
@@ -392,9 +398,15 @@ mod tests {
         dot[0] = 34;
         dot[32] = 1;
         dot[33] = 0;
-        assert_eq!(iso_name_to_string(parse_dir_record(&dot).unwrap().unwrap().name), ".");
+        assert_eq!(
+            iso_name_to_string(parse_dir_record(&dot).unwrap().unwrap().name),
+            "."
+        );
         dot[33] = 1;
-        assert_eq!(iso_name_to_string(parse_dir_record(&dot).unwrap().unwrap().name), "..");
+        assert_eq!(
+            iso_name_to_string(parse_dir_record(&dot).unwrap().unwrap().name),
+            ".."
+        );
     }
 
     #[test]
@@ -442,8 +454,8 @@ mod tests {
     fn rock_ridge_nm_continuation_flag() {
         // RRIP bit 0 (0x01) = name continues in the next NM entry
         let su = [
-            b'N', b'M', 10u8, 1, 0x01, b'l', b'o', b'n', b'g', b'-',
-            b'N', b'M', 9u8, 1, 0x00, b'n', b'a', b'm', b'e',
+            b'N', b'M', 10u8, 1, 0x01, b'l', b'o', b'n', b'g', b'-', b'N', b'M', 9u8, 1, 0x00,
+            b'n', b'a', b'm', b'e',
         ];
         assert_eq!(rock_ridge_name(&su).as_deref(), Some("long-name"));
     }
@@ -452,11 +464,13 @@ mod tests {
     fn rock_ridge_genisoimage_layout() {
         // bytes lifted from test.iso: RR then NM("boot") then PX entries
         let su = [
-            b'R', b'R', 5u8, 1, 0x89,
-            b'N', b'M', 9u8, 1, 0, b'b', b'o', b'o', b't',
-            b'P', b'X', 44u8, 1,
+            b'R', b'R', 5u8, 1, 0x89, b'N', b'M', 9u8, 1, 0, b'b', b'o', b'o', b't', b'P', b'X',
+            44u8, 1,
         ];
-        let su: Vec<u8> = su.into_iter().chain(std::iter::repeat(0u8).take(40)).collect();
+        let su: Vec<u8> = su
+            .into_iter()
+            .chain(std::iter::repeat(0u8).take(40))
+            .collect();
         assert_eq!(rock_ridge_name(&su).as_deref(), Some("boot"));
     }
 
@@ -464,7 +478,10 @@ mod tests {
     fn rock_ridge_no_nm_entry() {
         // PX entry (mode/links/...), no NM anywhere
         let su = vec![b'P', b'X', 36u8, 1];
-        let su = su.into_iter().chain(std::iter::repeat(0u8).take(32)).collect::<Vec<u8>>();
+        let su = su
+            .into_iter()
+            .chain(std::iter::repeat(0u8).take(32))
+            .collect::<Vec<u8>>();
         assert_eq!(rock_ridge_name(&su), None);
         assert_eq!(rock_ridge_name(&[]), None);
     }

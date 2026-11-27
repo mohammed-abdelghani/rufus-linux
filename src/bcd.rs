@@ -33,9 +33,9 @@
 //! from real bcdboot-created stores (mistyprojects BCDEdit notes, verified
 //! against a Windows 7 store export and booted in QEMU).
 
-use anyhow::bail;
 use crate::error::Result;
 use crate::gpt::Guid;
+use anyhow::bail;
 
 /// Windows Boot Manager object identifier (fixed, like `{bootmgr}`).
 pub const BOOTMGR_GUID: &str = "9dea862c-5cdd-4e70-acc1-f32b344d4795";
@@ -99,12 +99,18 @@ pub fn device_element(dev: &BcdDevice) -> Vec<u8> {
     e[0x18..0x1C].copy_from_slice(&0x48u32.to_le_bytes()); // payload size
     match dev {
         BcdDevice::Boot => unreachable!("handled above"),
-        BcdDevice::Mbr { disk_signature, partition_offset } => {
+        BcdDevice::Mbr {
+            disk_signature,
+            partition_offset,
+        } => {
             e[0x20..0x28].copy_from_slice(&partition_offset.to_le_bytes());
             e[0x34..0x38].copy_from_slice(&1u32.to_le_bytes()); // MBR style marker
             e[0x38..0x3C].copy_from_slice(&disk_signature.to_le_bytes());
         }
-        BcdDevice::Gpt { disk_guid, partition_guid } => {
+        BcdDevice::Gpt {
+            disk_guid,
+            partition_guid,
+        } => {
             e[0x20..0x30].copy_from_slice(&partition_guid.0); // partition GUID
             e[0x38..0x48].copy_from_slice(&disk_guid.0); // disk GUID
         }
@@ -193,7 +199,11 @@ struct HiveKey {
 
 impl HiveKey {
     fn new(name: &str) -> Self {
-        HiveKey { name: name.to_string(), values: Vec::new(), subkeys: Vec::new() }
+        HiveKey {
+            name: name.to_string(),
+            values: Vec::new(),
+            subkeys: Vec::new(),
+        }
     }
     fn value(mut self, name: &str, v: RegValue) -> Self {
         self.values.push((name.to_string(), v));
@@ -224,7 +234,9 @@ impl HiveCells {
     fn new() -> Self {
         // the first 32 bytes hold the hbin header; cell offsets are relative
         // to the start of the hive bins data (i.e. they include those 32)
-        HiveCells { data: vec![0u8; 32] }
+        HiveCells {
+            data: vec![0u8; 32],
+        }
     }
 
     /// Allocate an 8-aligned cell; `payload` is the record bytes. Returns the
@@ -253,7 +265,8 @@ impl HiveCells {
         }
         let off = self.data.len() as u32;
         let total = (4 + payload.len() + 7) & !7usize; // size incl. field, 8-aligned
-        self.data.extend_from_slice(&(-(total as i32)).to_le_bytes()); // negative = allocated
+        self.data
+            .extend_from_slice(&(-(total as i32)).to_le_bytes()); // negative = allocated
         self.data.extend_from_slice(payload);
         self.data.resize(off as usize + total, 0);
         off
@@ -376,7 +389,7 @@ impl HiveCells {
         nk[0..2].copy_from_slice(b"nk");
         nk[2..4].copy_from_slice(&flags.to_le_bytes());
         nk[4..12].copy_from_slice(&now.to_le_bytes()); // last written
-        // 0x0C spare = 0
+                                                       // 0x0C spare = 0
         nk[16..20].copy_from_slice(&parent_off.to_le_bytes());
         nk[20..24].copy_from_slice(&(key.subkeys.len() as u32).to_le_bytes());
         // 0x18 volatile subkeys = 0
@@ -408,17 +421,15 @@ impl HiveCells {
     /// walk the security chain and reject hives without it).
     fn alloc_sk(&mut self) -> u32 {
         const SD: &[u8] = &[
-            0x01, 0x00, 0x04, 0x80, 0x50, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x02, 0x00, 0x3c, 0x00,
-            0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00, 0x19, 0x00, 0x06, 0x00,
-            0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x20, 0x00, 0x00, 0x00,
-            0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x3f, 0x00, 0x0f, 0x00,
-            0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x12, 0x00, 0x00, 0x00,
-            0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0x01, 0x02, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x05, 0x20, 0x00, 0x00, 0x00, 0x20, 0x02, 0x00, 0x00,
-            0x01, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x15, 0x00, 0x00, 0x00,
-            0x59, 0x51, 0xb8, 0x17, 0x66, 0x72, 0x5d, 0x25, 0x64, 0x63, 0x3b, 0x0b,
-            0xc1, 0x99, 0x21, 0x00,
+            0x01, 0x00, 0x04, 0x80, 0x50, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x02, 0x00, 0x3c, 0x00, 0x02, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x18, 0x00, 0x19, 0x00, 0x06, 0x00, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x05, 0x20, 0x00, 0x00, 0x00, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00,
+            0x3f, 0x00, 0x0f, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x12, 0x00,
+            0x00, 0x00, 0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0xe0, 0x01, 0x02, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x05, 0x20, 0x00, 0x00, 0x00, 0x20, 0x02, 0x00, 0x00, 0x01, 0x05,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x15, 0x00, 0x00, 0x00, 0x59, 0x51, 0xb8, 0x17,
+            0x66, 0x72, 0x5d, 0x25, 0x64, 0x63, 0x3b, 0x0b, 0xc1, 0x99, 0x21, 0x00,
         ];
         // allocate the record first to learn its offset, then fill in the
         // self-referencing flink/blink
@@ -476,8 +487,8 @@ fn build_hive(root: &HiveKey) -> Vec<u8> {
     cells.data[8..12].copy_from_slice(&4096u32.to_le_bytes());
     // 12..20 reserved
     cells.data[20..28].copy_from_slice(&now.to_le_bytes()); // timestamp (first bin)
-    // 28..32 spare = 0
-    // free cell covering the rest of the last bin (positive = unallocated)
+                                                            // 28..32 spare = 0
+                                                            // free cell covering the rest of the last bin (positive = unallocated)
     let free = bin_size - cells.data.len();
     cells.data.extend_from_slice(&(free as i32).to_le_bytes());
     cells.data.resize(bin_size, 0);
@@ -503,7 +514,7 @@ fn build_hive(root: &HiveKey) -> Vec<u8> {
     base[36..40].copy_from_slice(&root_off.to_le_bytes()); // root cell offset
     base[40..44].copy_from_slice(&(bin_size as u32).to_le_bytes()); // bins data size
     base[44..48].copy_from_slice(&1u32.to_le_bytes()); // clustering factor
-    // file name (debug string, UTF-16LE)
+                                                       // file name (debug string, UTF-16LE)
     let fname: Vec<u16> = "\\Boot\\BCD".encode_utf16().collect();
     for (i, c) in fname.iter().enumerate().take(32) {
         base[48 + i * 2..50 + i * 2].copy_from_slice(&c.to_le_bytes());
@@ -579,9 +590,7 @@ pub fn patch_bcd_for_wtg(
         let mut off = bin + 32;
         let end = bin + 4096;
         while off + 8 <= end {
-            let sz = i32::from_le_bytes(
-                hive[4096 + off..4096 + off + 4].try_into().unwrap(),
-            );
+            let sz = i32::from_le_bytes(hive[4096 + off..4096 + off + 4].try_into().unwrap());
             if sz == 0 {
                 break;
             }
@@ -591,18 +600,15 @@ pub fn patch_bcd_for_wtg(
             }
             // key: bins-relative cell offset (what records reference);
             // payload range: file offsets (cells live at file offset 4096+)
-            map.cells.push((off as u32, 4096 + off + 4, 4096 + off + abs));
+            map.cells
+                .push((off as u32, 4096 + off + 4, 4096 + off + abs));
             off += abs;
         }
         bin += 4096;
     }
 
     // one value of a key: (vk cell, name, data_size, data payload range)
-    fn values(
-        hive: &[u8],
-        map: &CellMap,
-        nk: u32,
-    ) -> anyhow::Result<Vec<BcdValue>> {
+    fn values(hive: &[u8], map: &CellMap, nk: u32) -> anyhow::Result<Vec<BcdValue>> {
         let (s, e) = map.find(nk)?;
         let p = &hive[s..e];
         if &p[0..2] != b"nk" {
@@ -683,9 +689,7 @@ pub fn patch_bcd_for_wtg(
         let mut elements_cell = None;
         let mut is_osloader = false;
         for i in 0..cnt {
-            let so = u32::from_le_bytes(
-                lp[4 + i * stride..4 + i * stride + 4].try_into().unwrap(),
-            );
+            let so = u32::from_le_bytes(lp[4 + i * stride..4 + i * stride + 4].try_into().unwrap());
             let (ss, se) = match map.find(so) {
                 Ok(r) => r,
                 Err(_) => continue,
@@ -738,7 +742,9 @@ pub fn patch_bcd_for_wtg(
                 }
             }
         }
-        let Some(elements) = elements_cell else { continue };
+        let Some(elements) = elements_cell else {
+            continue;
+        };
         if !is_osloader {
             continue;
         }
@@ -761,9 +767,7 @@ pub fn patch_bcd_for_wtg(
         let cnt = u16::from_le_bytes(lp[2..4].try_into().unwrap()) as usize;
         let stride = if &lp[0..2] == b"li" { 4 } else { 8 };
         for i in 0..cnt {
-            let so = u32::from_le_bytes(
-                lp[4 + i * stride..4 + i * stride + 4].try_into().unwrap(),
-            );
+            let so = u32::from_le_bytes(lp[4 + i * stride..4 + i * stride + 4].try_into().unwrap());
             let (ss, se) = match map.find(so) {
                 Ok(r) => r,
                 Err(_) => continue,
@@ -810,10 +814,7 @@ pub fn patch_bcd_for_wtg(
                             );
                         }
                         edits.push((ds, dev_blob.clone()));
-                        edits.push((
-                            ds + dev_blob.len(),
-                            vec![0u8; de - ds - dev_blob.len()],
-                        ));
+                        edits.push((ds + dev_blob.len(), vec![0u8; de - ds - dev_blob.len()]));
                         szf = (szf & 0x8000_0000) | dev_blob.len() as u32;
                     }
                     "12000002" => {
@@ -881,7 +882,11 @@ pub fn patch_bcd_for_wtg(
 /// primary WTG path patches the ISO's own BCD instead; see patch_bcd_for_wtg).
 pub fn build_bcd(spec: &BcdSpec) -> Result<Vec<u8>> {
     let entry = spec.entry_guid.trim().to_lowercase();
-    let entry = if entry.starts_with('{') { entry } else { format!("{{{entry}}}") };
+    let entry = if entry.starts_with('{') {
+        entry
+    } else {
+        format!("{{{entry}}}")
+    };
 
     // inherited settings objects — bcdboot stores always carry the full
     // chain: {globalsettings} → {dbgsettings}/{emssettings}/{ramdefects},
@@ -897,10 +902,23 @@ pub fn build_bcd(spec: &BcdSpec) -> Result<Vec<u8>> {
             .subkey(elems)
     };
     let dbg_elems = HiveKey::new("Elements")
-        .element(ELEM_DEBUG_TYPE, RegValue::Binary(0u64.to_le_bytes().to_vec()))
-        .element(ELEM_DEBUG_PORT, RegValue::Binary(1u64.to_le_bytes().to_vec()))
-        .element(ELEM_BAUD_RATE, RegValue::Binary(115200u64.to_le_bytes().to_vec()));
-    let dbg = inherited(&format!("{{{DBGSETTINGS_GUID}}}"), DBGSETTINGS_GUID, dbg_elems);
+        .element(
+            ELEM_DEBUG_TYPE,
+            RegValue::Binary(0u64.to_le_bytes().to_vec()),
+        )
+        .element(
+            ELEM_DEBUG_PORT,
+            RegValue::Binary(1u64.to_le_bytes().to_vec()),
+        )
+        .element(
+            ELEM_BAUD_RATE,
+            RegValue::Binary(115200u64.to_le_bytes().to_vec()),
+        );
+    let dbg = inherited(
+        &format!("{{{DBGSETTINGS_GUID}}}"),
+        DBGSETTINGS_GUID,
+        dbg_elems,
+    );
     let ems = inherited(
         &format!("{{{EMSSETTINGS_GUID}}}"),
         EMSSETTINGS_GUID,
@@ -917,40 +935,48 @@ pub fn build_bcd(spec: &BcdSpec) -> Result<Vec<u8>> {
         HiveKey::new("Elements")
             .element(0x250000f3, RegValue::Binary(0u64.to_le_bytes().to_vec()))
             .element(0x250000f4, RegValue::Binary(1u64.to_le_bytes().to_vec()))
-            .element(0x250000f5, RegValue::Binary(70000u64.to_le_bytes().to_vec())),
+            .element(
+                0x250000f5,
+                RegValue::Binary(70000u64.to_le_bytes().to_vec()),
+            ),
     );
     let globalsettings = HiveKey::new(&format!("{{{GLOBALSETTINGS_GUID}}}"))
         .subkey(HiveKey::new("Description").value("Type", RegValue::Dword(0x2010_0000)))
-        .subkey(
-            HiveKey::new("Elements").element(
-                ELEM_INHERIT,
-                RegValue::MultiSz(vec![
-                    format!("{{{DBGSETTINGS_GUID}}}"),
-                    format!("{{{EMSSETTINGS_GUID}}}"),
-                    format!("{{{RAMDEFECTS_GUID}}}"),
-                ]),
-            ),
-        );
+        .subkey(HiveKey::new("Elements").element(
+            ELEM_INHERIT,
+            RegValue::MultiSz(vec![
+                format!("{{{DBGSETTINGS_GUID}}}"),
+                format!("{{{EMSSETTINGS_GUID}}}"),
+                format!("{{{RAMDEFECTS_GUID}}}"),
+            ]),
+        ));
     let bootloadersettings = HiveKey::new(&format!("{{{BOOTLOADERSETTINGS_GUID}}}"))
         .subkey(HiveKey::new("Description").value("Type", RegValue::Dword(0x2010_0000)))
-        .subkey(
-            HiveKey::new("Elements").element(
-                ELEM_INHERIT,
-                RegValue::MultiSz(vec![
-                    format!("{{{GLOBALSETTINGS_GUID}}}"),
-                    format!("{{{HYPERVISORSETTINGS_GUID}}}"),
-                ]),
-            ),
-        );
+        .subkey(HiveKey::new("Elements").element(
+            ELEM_INHERIT,
+            RegValue::MultiSz(vec![
+                format!("{{{GLOBALSETTINGS_GUID}}}"),
+                format!("{{{HYPERVISORSETTINGS_GUID}}}"),
+            ]),
+        ));
 
     let bootmgr = HiveKey::new(&format!("{{{BOOTMGR_GUID}}}"))
         .subkey(HiveKey::new("Description").value("Type", RegValue::Dword(OBJ_BOOTMGR)))
         .subkey(
             HiveKey::new("Elements")
-                .element(ELEM_DEVICE, RegValue::Binary(device_element(&spec.boot_device)))
-                .element(ELEM_DESCRIPTION, RegValue::Sz("Windows Boot Manager".into()))
+                .element(
+                    ELEM_DEVICE,
+                    RegValue::Binary(device_element(&spec.boot_device)),
+                )
+                .element(
+                    ELEM_DESCRIPTION,
+                    RegValue::Sz("Windows Boot Manager".into()),
+                )
                 .element(ELEM_LOCALE, RegValue::Sz(spec.locale.clone()))
-                .element(ELEM_INHERIT, RegValue::MultiSz(vec![format!("{{{GLOBALSETTINGS_GUID}}}")]))
+                .element(
+                    ELEM_INHERIT,
+                    RegValue::MultiSz(vec![format!("{{{GLOBALSETTINGS_GUID}}}")]),
+                )
                 .element(ELEM_DEFAULT, RegValue::Sz(entry.clone()))
                 .element(ELEM_DISPLAY_ORDER, RegValue::MultiSz(vec![entry.clone()]))
                 .element(ELEM_TIMEOUT, RegValue::Binary(30u64.to_le_bytes().to_vec())),
@@ -967,14 +993,23 @@ pub fn build_bcd(spec: &BcdSpec) -> Result<Vec<u8>> {
         vec![format!("{{{BOOTLOADERSETTINGS_GUID}}}")]
     };
     let mut osloader_elems = HiveKey::new("Elements")
-        .element(ELEM_DEVICE, RegValue::Binary(device_element(&spec.os_device)))
+        .element(
+            ELEM_DEVICE,
+            RegValue::Binary(device_element(&spec.os_device)),
+        )
         .element(ELEM_PATH, RegValue::Sz(spec.loader_path.clone()))
-        .element(ELEM_DESCRIPTION, RegValue::Sz(spec.entry_description.clone()))
+        .element(
+            ELEM_DESCRIPTION,
+            RegValue::Sz(spec.entry_description.clone()),
+        )
         .element(ELEM_LOCALE, RegValue::Sz(spec.locale.clone()))
         .element(ELEM_INHERIT, RegValue::MultiSz(loader_inherit))
         // Rufus: bcdedit /set {default} recoveryenabled no
         .element(ELEM_RECOVERY_ENABLED, RegValue::Binary(vec![0]))
-        .element(ELEM_OS_DEVICE, RegValue::Binary(device_element(&spec.os_device)))
+        .element(
+            ELEM_OS_DEVICE,
+            RegValue::Binary(device_element(&spec.os_device)),
+        )
         .element(ELEM_SYSTEM_ROOT, RegValue::Sz("\\Windows".into()))
         // nx = OptIn, like bcdboot-created stores
         .element(ELEM_NX, RegValue::Binary(0u64.to_le_bytes().to_vec()));
@@ -990,8 +1025,8 @@ pub fn build_bcd(spec: &BcdSpec) -> Result<Vec<u8>> {
         // /debug on: the kernel prints its debugger handshake to COM1, which
         // the QEMU boot test uses to prove the OS actually started from our BCD
         objects = objects.subkey(dbg);
-        osloader_elems = osloader_elems
-            .element(ELEM_KERNEL_DEBUGGER_ENABLED, RegValue::Binary(vec![1]));
+        osloader_elems =
+            osloader_elems.element(ELEM_KERNEL_DEBUGGER_ENABLED, RegValue::Binary(vec![1]));
     }
     let osloader = HiveKey::new(&entry)
         .subkey(HiveKey::new("Description").value("Type", RegValue::Dword(OBJ_OSLOADER)))
@@ -1005,7 +1040,11 @@ pub fn build_bcd(spec: &BcdSpec) -> Result<Vec<u8>> {
     let mut kn = filetime_now().to_le_bytes().to_vec();
     kn.extend_from_slice(&[0u8; 16]);
     let keyname = RegValue::Sz(String::from_utf16_lossy(
-        &kn.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect::<Vec<_>>(),
+        &kn.as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
+            .collect::<Vec<_>>(),
     ));
     let root = HiveKey::new("System")
         .subkey(HiveKey::new("Description").value("KeyName", keyname))
@@ -1033,9 +1072,7 @@ mod tests {
     impl<'a> HiveReader<'a> {
         pub(crate) fn cell_payload(&self, off: u32) -> &'a [u8] {
             let start = off as usize;
-            let size = i32::from_le_bytes(
-                self.bins[start..start + 4].try_into().unwrap(),
-            );
+            let size = i32::from_le_bytes(self.bins[start..start + 4].try_into().unwrap());
             assert!(size < 0, "cell at {off:#x} should be allocated");
             let size = (-size) as usize;
             &self.bins[start + 4..start + size]
@@ -1081,7 +1118,11 @@ mod tests {
         } else {
             cells.cell_payload(off_field)[..size_field as usize].to_vec()
         };
-        ParsedValue { name, reg_type, data }
+        ParsedValue {
+            name,
+            reg_type,
+            data,
+        }
     }
 
     fn parse_nk(cells: &HiveReader, off: u32) -> ParsedKey {
@@ -1114,12 +1155,15 @@ mod tests {
             assert_eq!(&lp[0..2], b"lf");
             let cnt = u16::from_le_bytes(lp[2..4].try_into().unwrap()) as usize;
             for i in 0..cnt {
-                let sub_off =
-                    u32::from_le_bytes(lp[4 + i * 8..4 + i * 8 + 4].try_into().unwrap());
+                let sub_off = u32::from_le_bytes(lp[4 + i * 8..4 + i * 8 + 4].try_into().unwrap());
                 subkeys.push(parse_nk(cells, sub_off));
             }
         }
-        ParsedKey { name, subkeys, values }
+        ParsedKey {
+            name,
+            subkeys,
+            values,
+        }
     }
 
     fn parse_hive(bytes: &[u8]) -> ParsedKey {
@@ -1132,17 +1176,23 @@ mod tests {
         let bins = &bytes[4096..4096 + bins_size];
         assert_eq!(&bins[0..4], b"hbin");
         assert_eq!(bins_size % 4096, 0, "bin size is a multiple of 4096");
-        let cells = HiveReader { bins: &bins[..bins_size] };
+        let cells = HiveReader {
+            bins: &bins[..bins_size],
+        };
         parse_nk(&cells, root_off)
     }
 
     fn key<'a>(k: &'a ParsedKey, name: &str) -> &'a ParsedKey {
-        k.subkeys.iter().find(|s| s.name == name)
+        k.subkeys
+            .iter()
+            .find(|s| s.name == name)
             .unwrap_or_else(|| panic!("missing subkey {name} under {}", k.name))
     }
 
     fn value<'a>(k: &'a ParsedKey, name: &str) -> &'a ParsedValue {
-        k.values.iter().find(|v| v.name == name)
+        k.values
+            .iter()
+            .find(|v| v.name == name)
             .unwrap_or_else(|| panic!("missing value {name} under {}", k.name))
     }
 
@@ -1153,8 +1203,14 @@ mod tests {
 
     fn sample_spec() -> BcdSpec {
         BcdSpec {
-            boot_device: BcdDevice::Mbr { disk_signature: 0x2344A9FF, partition_offset: 0x40100000 },
-            os_device: BcdDevice::Mbr { disk_signature: 0x2344A9FF, partition_offset: 0x40100000 },
+            boot_device: BcdDevice::Mbr {
+                disk_signature: 0x2344A9FF,
+                partition_offset: 0x40100000,
+            },
+            os_device: BcdDevice::Mbr {
+                disk_signature: 0x2344A9FF,
+                partition_offset: 0x40100000,
+            },
             entry_guid: "{3afd365b-4349-11e3-b0da-a722f0df0a34}".into(),
             entry_description: "Windows To Go".into(),
             loader_path: "\\Windows\\system32\\winload.exe".into(),
@@ -1167,14 +1223,23 @@ mod tests {
     fn device_element_matches_real_store_bytes() {
         // byte-identical to the qualified-partition element of a real
         // Windows 7 store (partition=C:, sig 0x2344A9FF, offset 0x40100000)
-        let dev = BcdDevice::Mbr { disk_signature: 0x2344A9FF, partition_offset: 0x40100000 };
+        let dev = BcdDevice::Mbr {
+            disk_signature: 0x2344A9FF,
+            partition_offset: 0x40100000,
+        };
         let e = device_element(&dev);
         assert_eq!(e.len(), 88);
         assert_eq!(u32::from_le_bytes(e[0x10..0x14].try_into().unwrap()), 6);
         assert_eq!(u32::from_le_bytes(e[0x18..0x1C].try_into().unwrap()), 0x48);
-        assert_eq!(u64::from_le_bytes(e[0x20..0x28].try_into().unwrap()), 0x40100000);
+        assert_eq!(
+            u64::from_le_bytes(e[0x20..0x28].try_into().unwrap()),
+            0x40100000
+        );
         assert_eq!(u32::from_le_bytes(e[0x34..0x38].try_into().unwrap()), 1);
-        assert_eq!(u32::from_le_bytes(e[0x38..0x3C].try_into().unwrap()), 0x2344A9FF);
+        assert_eq!(
+            u32::from_le_bytes(e[0x38..0x3C].try_into().unwrap()),
+            0x2344A9FF
+        );
         assert!(e[0x3C..].iter().all(|&x| x == 0));
     }
 
@@ -1182,14 +1247,17 @@ mod tests {
     fn device_element_gpt_layout() {
         // mirrors the real GPT store: partition GUID @0x20, disk GUID @0x38
         let disk = Guid([
-            0xd2, 0x54, 0xac, 0xd9, 0x87, 0xea, 0x2c, 0x43,
-            0x86, 0xb5, 0x66, 0xc4, 0xe8, 0x10, 0x5f, 0x9d,
+            0xd2, 0x54, 0xac, 0xd9, 0x87, 0xea, 0x2c, 0x43, 0x86, 0xb5, 0x66, 0xc4, 0xe8, 0x10,
+            0x5f, 0x9d,
         ]);
         let part = Guid([
-            0x08, 0x63, 0xe5, 0xbb, 0xe7, 0x18, 0x34, 0x41,
-            0x9b, 0x6c, 0x4b, 0x31, 0x4d, 0x12, 0xea, 0xb4,
+            0x08, 0x63, 0xe5, 0xbb, 0xe7, 0x18, 0x34, 0x41, 0x9b, 0x6c, 0x4b, 0x31, 0x4d, 0x12,
+            0xea, 0xb4,
         ]);
-        let e = device_element(&BcdDevice::Gpt { disk_guid: disk, partition_guid: part });
+        let e = device_element(&BcdDevice::Gpt {
+            disk_guid: disk,
+            partition_guid: part,
+        });
         assert_eq!(e.len(), 88);
         assert_eq!(&e[0x20..0x30], &part.0);
         assert_eq!(u64::from_le_bytes(e[0x30..0x38].try_into().unwrap()), 0);
@@ -1214,14 +1282,24 @@ mod tests {
         let bm_elems = key(bootmgr, "Elements");
         let dev = elem(bm_elems, "11000001");
         assert_eq!(dev.reg_type, 3); // REG_BINARY
-        assert_eq!(dev.data, device_element(&BcdDevice::Mbr {
-            disk_signature: 0x2344A9FF, partition_offset: 0x40100000
-        }));
-        assert_eq!(elem(bm_elems, "12000004").data, to_utf16("Windows Boot Manager"));
+        assert_eq!(
+            dev.data,
+            device_element(&BcdDevice::Mbr {
+                disk_signature: 0x2344A9FF,
+                partition_offset: 0x40100000
+            })
+        );
+        assert_eq!(
+            elem(bm_elems, "12000004").data,
+            to_utf16("Windows Boot Manager")
+        );
         assert_eq!(elem(bm_elems, "25000004").data, 30u64.to_le_bytes());
         let default = elem(bm_elems, "23000003");
         assert_eq!(default.reg_type, 1); // REG_SZ
-        assert_eq!(default.data, to_utf16("{3afd365b-4349-11e3-b0da-a722f0df0a34}"));
+        assert_eq!(
+            default.data,
+            to_utf16("{3afd365b-4349-11e3-b0da-a722f0df0a34}")
+        );
         let order = elem(bm_elems, "24000001");
         assert_eq!(order.reg_type, 7); // REG_MULTI_SZ
         let mut expect = to_utf16("{3afd365b-4349-11e3-b0da-a722f0df0a34}");
@@ -1232,7 +1310,10 @@ mod tests {
         let e_type = value(key(entry, "Description"), "Type");
         assert_eq!(e_type.data, OBJ_OSLOADER.to_le_bytes());
         let e_elems = key(entry, "Elements");
-        assert_eq!(elem(e_elems, "12000002").data, to_utf16("\\Windows\\system32\\winload.exe"));
+        assert_eq!(
+            elem(e_elems, "12000002").data,
+            to_utf16("\\Windows\\system32\\winload.exe")
+        );
         assert_eq!(elem(e_elems, "22000002").data, to_utf16("\\Windows"));
         assert_eq!(elem(e_elems, "12000004").data, to_utf16("Windows To Go"));
         // recoveryenabled = no → one 0 byte (like the real store's booleans)
@@ -1278,7 +1359,6 @@ mod tests {
             bin += 4096;
         }
     }
-
 
     #[test]
     fn patch_bcd_retargets_osloader_like_qemu_test() {
@@ -1331,10 +1411,7 @@ mod tests {
         );
         // description retargeted (cell allows it: "Windows To Go" fits where
         // "Windows Setup" was)
-        assert_eq!(
-            elem(elems, "12000004").data,
-            to_utf16("Windows To Go")
-        );
+        assert_eq!(elem(elems, "12000004").data, to_utf16("Windows To Go"));
     }
 
     #[test]
@@ -1367,7 +1444,10 @@ mod tests {
         let mut hive = build_bcd(&spec).unwrap();
         let res = patch_bcd_for_wtg(
             &mut hive,
-            &BcdDevice::Gpt { disk_guid: Guid([7u8; 16]), partition_guid: Guid([9u8; 16]) },
+            &BcdDevice::Gpt {
+                disk_guid: Guid([7u8; 16]),
+                partition_guid: Guid([9u8; 16]),
+            },
             "\\Windows\\system32\\winload.efi",
             "Windows To Go",
         );
@@ -1391,6 +1471,8 @@ mod tests {
             elem(key(bootmgr, "Elements"), "23000003").data,
             to_utf16("{3afd365b-4349-11e3-b0da-a722f0df0a34}")
         );
-        assert!(key(objects, "{3afd365b-4349-11e3-b0da-a722f0df0a34}").name.starts_with('{'));
+        assert!(key(objects, "{3afd365b-4349-11e3-b0da-a722f0df0a34}")
+            .name
+            .starts_with('{'));
     }
 }

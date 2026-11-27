@@ -115,12 +115,11 @@ pub fn lang_index(code: &str) -> Option<usize> {
         return None;
     }
     // exact code ("zh-tw" -> zh-TW), then script prefix ("zh" -> zh-CN)
-    LANGS.iter()
-        .position(|l| norm(l.code) == want)
-        .or_else(|| {
-            LANGS.iter()
-                .position(|l| norm(l.code).starts_with(&want) && want.len() >= 2)
-        })
+    LANGS.iter().position(|l| norm(l.code) == want).or_else(|| {
+        LANGS
+            .iter()
+            .position(|l| norm(l.code).starts_with(&want) && want.len() >= 2)
+    })
 }
 
 /// Detect the UI language from the environment (LC_ALL > LC_MESSAGES > LANG),
@@ -128,7 +127,11 @@ pub fn lang_index(code: &str) -> Option<usize> {
 pub fn detect_system() -> usize {
     let loc = ["LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()
-        .find_map(|v| std::env::var(v).ok().filter(|s| !s.is_empty() && s != "C" && s != "POSIX"))
+        .find_map(|v| {
+            std::env::var(v)
+                .ok()
+                .filter(|s| !s.is_empty() && s != "C" && s != "POSIX")
+        })
         .unwrap_or_default();
     // "pt_BR.UTF-8" -> "pt-BR", "ar_EG" -> "ar"
     let base = loc.split('.').next().unwrap_or("");
@@ -198,7 +201,14 @@ mod tests {
     fn language_count_matches_rufus_locales() {
         // Rufus res/loc/po ships 37 .po files + the built-in English
         assert_eq!(LANGS.len(), 38);
-        assert_eq!(LANGS[0], Lang { code: "en", name: "English", rtl: false });
+        assert_eq!(
+            LANGS[0],
+            Lang {
+                code: "en",
+                name: "English",
+                rtl: false
+            }
+        );
         assert_eq!(LANGS[1].code, "ar-SA");
         assert_eq!(LANGS[37].code, "zh-TW");
     }
@@ -239,8 +249,14 @@ mod tests {
         // English (source locale) returns the msgid key itself, which keeps
         // Rufus's original "%s" spelling — the args must still land there
         assert_eq!(trf(0, "%s (Default)", &["FAT32"]), "FAT32 (Default)");
-        assert_eq!(trf(0, "Show %s", &["advanced drive properties"]), "Show advanced drive properties");
-        assert_eq!(trf(0, "%s enabled", &["Use Rufus MBR"]), "Use Rufus MBR enabled");
+        assert_eq!(
+            trf(0, "Show %s", &["advanced drive properties"]),
+            "Show advanced drive properties"
+        );
+        assert_eq!(
+            trf(0, "%s enabled", &["Use Rufus MBR"]),
+            "Use Rufus MBR enabled"
+        );
         // translated values carry {0} — both spellings resolve end to end
         let ar = lang_index("ar-SA").unwrap();
         let s = trf(ar, "%s (Default)", &["FAT32"]);
@@ -275,7 +291,11 @@ mod tests {
             let t = table(i);
             assert!(!t.is_empty(), "{} has an empty table", LANGS[i].code);
             for (k, v) in t {
-                assert!(!k.is_empty() && !v.is_empty(), "{}: empty entry", LANGS[i].code);
+                assert!(
+                    !k.is_empty() && !v.is_empty(),
+                    "{}: empty entry",
+                    LANGS[i].code
+                );
             }
             // keys are unique (binary-searchable later if needed)
             let mut ks: Vec<&str> = t.iter().map(|(k, _)| *k).collect();

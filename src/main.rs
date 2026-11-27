@@ -4,11 +4,11 @@ mod config;
 mod device;
 mod disk;
 mod download;
-mod error;
-mod gui;
 mod engine;
+mod error;
 mod fat32;
 mod gpt;
+mod gui;
 mod iso9660;
 mod locale;
 mod mbr;
@@ -18,7 +18,11 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "rufus-linux", version, about = "Linux rewrite of Rufus - create bootable USB drives")]
+#[command(
+    name = "rufus-linux",
+    version,
+    about = "Linux rewrite of Rufus - create bootable USB drives"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
@@ -174,7 +178,11 @@ fn main() -> Result<()> {
                     crate::locale::lang_index(code).ok_or_else(|| {
                         anyhow::anyhow!(
                             "unknown locale '{code}' — valid codes: {}",
-                            crate::locale::LANGS.iter().map(|l| l.code).collect::<Vec<_>>().join(" ")
+                            crate::locale::LANGS
+                                .iter()
+                                .map(|l| l.code)
+                                .collect::<Vec<_>>()
+                                .join(" ")
                         )
                     })
                 })
@@ -199,7 +207,11 @@ fn main() -> Result<()> {
                     d.vendor,
                     d.bus,
                     if d.removable { "yes" } else { "no" },
-                    if d.serial.is_empty() { String::new() } else { format!("SN={}", d.serial) }
+                    if d.serial.is_empty() {
+                        String::new()
+                    } else {
+                        format!("SN={}", d.serial)
+                    }
                 );
             }
             Ok(())
@@ -263,25 +275,50 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some(Cmd::FmtFile { file, size_mb }) => {
-            let f = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(true).open(&file)?;
+            let f = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&file)?;
             f.set_len(size_mb * 1024 * 1024)?;
             let mut w = std::io::BufWriter::new(f);
-            fat32::format_fat32(&mut w, size_mb * 1024 * 1024, 512, "TEST", 0, false, &mut |d, t| {
-                eprintln!("fmt {}/{}", d, t);
-            })?;
+            fat32::format_fat32(
+                &mut w,
+                size_mb * 1024 * 1024,
+                512,
+                "TEST",
+                0,
+                false,
+                &mut |d, t| {
+                    eprintln!("fmt {}/{}", d, t);
+                },
+            )?;
             use std::io::Write;
             w.flush()?;
             println!("formatted {}", file.display());
             Ok(())
         }
-        Some(Cmd::BcdGen { out, gpt, disk_guid, part_guid, mbr_sig, part_offset, kernel_debug, boot_device }) => {
+        Some(Cmd::BcdGen {
+            out,
+            gpt,
+            disk_guid,
+            part_guid,
+            mbr_sig,
+            part_offset,
+            kernel_debug,
+            boot_device,
+        }) => {
             let (boot_dev, os_dev) = if boot_device {
                 let dev = crate::bcd::BcdDevice::Boot;
                 (dev.clone(), dev)
             } else if gpt {
                 let disk = parse_guid(&disk_guid)?;
                 let part = parse_guid(&part_guid)?;
-                let dev = crate::bcd::BcdDevice::Gpt { disk_guid: disk, partition_guid: part };
+                let dev = crate::bcd::BcdDevice::Gpt {
+                    disk_guid: disk,
+                    partition_guid: part,
+                };
                 (dev.clone(), dev)
             } else {
                 let dev = crate::bcd::BcdDevice::Mbr {
@@ -308,7 +345,27 @@ fn main() -> Result<()> {
             println!("wrote {} ({} bytes)", out.display(), bcd.len());
             Ok(())
         }
-        Some(Cmd::Write { device, image, label, gpt, quick, badblocks, efi_only, verify, persistent, old_bios_fixes, no_rufus_mbr, disk_id, no_autorun, yes, force, mode, fs, image_option, wim_index }) => {
+        Some(Cmd::Write {
+            device,
+            image,
+            label,
+            gpt,
+            quick,
+            badblocks,
+            efi_only,
+            verify,
+            persistent,
+            old_bios_fixes,
+            no_rufus_mbr,
+            disk_id,
+            no_autorun,
+            yes,
+            force,
+            mode,
+            fs,
+            image_option,
+            wim_index,
+        }) => {
             let devs = device::list_devices(device::DevFilter::All);
             let dev = devs
                 .iter()
@@ -317,12 +374,15 @@ fn main() -> Result<()> {
                 .unwrap_or_else(|| device::Device {
                     path: device.clone(),
                     name: device.rsplit('/').next().unwrap_or(&device).to_string(),
-                    size: std::fs::read_to_string(format!("/sys/block/{}/size", device.rsplit('/').next().unwrap_or("")))
-                        .ok()
-                        .and_then(|s| s.trim().parse::<u64>().ok())
-                        .map(|v| v.saturating_mul(512))
-                        .or_else(|| std::fs::metadata(&device).ok().map(|m| m.len()))
-                        .unwrap_or(0),
+                    size: std::fs::read_to_string(format!(
+                        "/sys/block/{}/size",
+                        device.rsplit('/').next().unwrap_or("")
+                    ))
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .map(|v| v.saturating_mul(512))
+                    .or_else(|| std::fs::metadata(&device).ok().map(|m| m.len()))
+                    .unwrap_or(0),
                     model: String::new(),
                     vendor: String::new(),
                     serial: String::new(),
@@ -365,7 +425,9 @@ fn main() -> Result<()> {
             let disk_id = u8::from_str_radix(hex, 16)
                 .ok()
                 .filter(|v| (0x80..=0x87).contains(v))
-                .ok_or_else(|| anyhow::anyhow!("--disk-id must be 0x80-0x87 (Rufus disk masquerade)"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("--disk-id must be 0x80-0x87 (Rufus disk masquerade)")
+                })?;
             if write_mode == engine::WriteMode::DiskImage && image.is_none() {
                 anyhow::bail!("--mode disk-image requires an image file");
             }
@@ -381,7 +443,11 @@ fn main() -> Result<()> {
                 image_desc,
                 dev.path,
                 dev.size_human(),
-                if dev.model.is_empty() { "unknown model" } else { &dev.model },
+                if dev.model.is_empty() {
+                    "unknown model"
+                } else {
+                    &dev.model
+                },
                 dev.path
             );
             if let Some(mib) = persistent {
@@ -420,7 +486,11 @@ fn main() -> Result<()> {
                     "exfat" => engine::FsKind::Exfat,
                     _ => engine::FsKind::Fat32,
                 },
-                scheme: if gpt { engine::PartitionScheme::Gpt } else { engine::PartitionScheme::Mbr },
+                scheme: if gpt {
+                    engine::PartitionScheme::Gpt
+                } else {
+                    engine::PartitionScheme::Mbr
+                },
                 fs_label: label,
                 quick,
                 verify,
@@ -452,4 +522,3 @@ fn main() -> Result<()> {
         }
     }
 }
-

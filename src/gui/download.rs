@@ -112,7 +112,10 @@ impl DlDialog {
 pub(super) fn items_for_dialog(d: &DlDialog, dd: DD) -> Vec<String> {
     match dd {
         DD::DlRelease => {
-            let mut v: Vec<String> = net::WIN_RELEASES.iter().map(|r| r.name.to_string()).collect();
+            let mut v: Vec<String> = net::WIN_RELEASES
+                .iter()
+                .map(|r| r.name.to_string())
+                .collect();
             v.extend(net::DISTROS.iter().map(|d| d.name.to_string()));
             v
         }
@@ -227,7 +230,11 @@ impl App {
             if r.contains(mx, my) {
                 match w {
                     Widget::Combo(dd) => {
-                        self.ui.open_dd = if self.ui.open_dd == Some(*dd) { None } else { Some(*dd) };
+                        self.ui.open_dd = if self.ui.open_dd == Some(*dd) {
+                            None
+                        } else {
+                            Some(*dd)
+                        };
                         self.ui.dd_scroll = 0;
                     }
                     Widget::DlDownload => self.dl_start(),
@@ -358,7 +365,11 @@ impl App {
         let target = variant.target;
         let (tx, rx) = channel();
         self.ui.dl_rx = Some(rx);
-        self.push_log(format!("resolving {} — {} …", net::DISTROS[di].name, variant.label));
+        self.push_log(format!(
+            "resolving {} — {} …",
+            net::DISTROS[di].name,
+            variant.label
+        ));
         std::thread::spawn(move || {
             let res = net::resolve_target(&target).map_err(|e| format!("{e:#}"));
             let _ = tx.send(DlMsg::Resolved(res));
@@ -373,7 +384,9 @@ impl App {
         }
         let (url, expected, hint) = if self.ui.dl.is_windows() {
             let d = &self.ui.dl;
-            let Fetch::Ready(links) = &d.links else { return };
+            let Fetch::Ready(links) = &d.links else {
+                return;
+            };
             let i = d.sel_arch.min(links.len().saturating_sub(1));
             let l = &links[i];
             let hint = url_hint(&l.url);
@@ -388,15 +401,24 @@ impl App {
         self.ui.dl_cancel = Some(token.clone());
         let (tx, rx) = channel();
         self.ui.dl_rx = Some(rx);
-        self.ui.dl.phase = DlPhase::Downloading { done: 0, total: None };
+        self.ui.dl.phase = DlPhase::Downloading {
+            done: 0,
+            total: None,
+        };
         self.ui.open_dd = None;
         self.ui_dirty = true;
         self.push_log(format!("downloading {hint} …"));
         self.push_log(format!("saving to {}", dir.display()));
         std::thread::spawn(move || {
-            let res = net::download_iso(&url, &dir, expected.as_deref(), &token, &mut |done, total| {
-                let _ = tx.send(DlMsg::Progress { done, total });
-            });
+            let res = net::download_iso(
+                &url,
+                &dir,
+                expected.as_deref(),
+                &token,
+                &mut |done, total| {
+                    let _ = tx.send(DlMsg::Progress { done, total });
+                },
+            );
             let _ = tx.send(DlMsg::Done(res.map_err(|e| format!("{e:#}"))));
         });
     }
@@ -423,7 +445,8 @@ impl App {
             DlMsg::Langs(res) => {
                 self.ui.dl.langs = match res {
                     Ok(v) => {
-                        self.ui.dl.sel_lang = net::default_lang_index(&v, &std::env::var("LANG").unwrap_or_default());
+                        self.ui.dl.sel_lang =
+                            net::default_lang_index(&v, &std::env::var("LANG").unwrap_or_default());
                         self.push_log(format!("{} languages available", v.len()));
                         Fetch::Ready(v)
                     }
@@ -480,7 +503,11 @@ impl App {
                             "downloaded {} ({}, {}{})",
                             r.file_name,
                             fmt_size(r.bytes),
-                            if r.verified { "SHA-256 verified" } else { "unverified source" },
+                            if r.verified {
+                                "SHA-256 verified"
+                            } else {
+                                "unverified source"
+                            },
                             if r.verified {
                                 format!(" — {}", &r.sha256[..16.min(r.sha256.len())])
                             } else {
@@ -537,14 +564,39 @@ pub(super) fn render_dl(
     let lang = ui.locale;
     let pw = 500.0;
     let ph = 384.0;
-    let panel = Rect { x: (width - pw) / 2.0, y: (height - ph) / 2.0, w: pw, h: ph };
+    let panel = Rect {
+        x: (width - pw) / 2.0,
+        y: (height - ph) / 2.0,
+        w: pw,
+        h: ph,
+    };
     p.fill(panel, FIELD);
     p.frame(panel, ACCENT);
     // header band (same style as the Windows User Experience dialog)
-    let header = Rect { x: panel.x, y: panel.y, w: panel.w, h: 34.0 };
+    let header = Rect {
+        x: panel.x,
+        y: panel.y,
+        w: panel.w,
+        h: 34.0,
+    };
     p.fill(header, 0xDCEBF5);
-    p.fill(Rect { x: panel.x, y: panel.y + 34.0, w: panel.w, h: 1.0 }, BORDER);
-    p.text(panel.x + 14.0, panel.y + 9.0, crate::locale::tr(lang, "Download ISO Image"), 14.0, TEXT, true);
+    p.fill(
+        Rect {
+            x: panel.x,
+            y: panel.y + 34.0,
+            w: panel.w,
+            h: 1.0,
+        },
+        BORDER,
+    );
+    p.text(
+        panel.x + 14.0,
+        panel.y + 9.0,
+        crate::locale::tr(lang, "Download ISO Image"),
+        14.0,
+        TEXT,
+        true,
+    );
 
     let combo_x = panel.x + 14.0;
     let combo_w = pw - 28.0;
@@ -554,45 +606,124 @@ pub(super) fn render_dl(
     let mut y = panel.y + 48.0;
 
     // Release (Windows releases + Linux distros, like Rufus 4.6)
-    p.text(combo_x, y, crate::locale::tr(lang, "Release"), 12.0, TEXT, false);
+    p.text(
+        combo_x,
+        y,
+        crate::locale::tr(lang, "Release"),
+        12.0,
+        TEXT,
+        false,
+    );
     y += 15.0;
     let items = items_for_dialog(d, DD::DlRelease);
-    let rel_text = items.get(d.selection(DD::DlRelease)).cloned().unwrap_or_default();
-    let r = Rect { x: combo_x, y, w: combo_w, h: COMBO_H };
-    App::draw_combo(p, r, &rel_text, clickable, ui.open_dd == Some(DD::DlRelease), mouse);
+    let rel_text = items
+        .get(d.selection(DD::DlRelease))
+        .cloned()
+        .unwrap_or_default();
+    let r = Rect {
+        x: combo_x,
+        y,
+        w: combo_w,
+        h: COMBO_H,
+    };
+    App::draw_combo(
+        p,
+        r,
+        &rel_text,
+        clickable,
+        ui.open_dd == Some(DD::DlRelease),
+        mouse,
+    );
     combo_rects.push((DD::DlRelease, r));
     ui.widgets.push((r, Widget::Combo(DD::DlRelease)));
     y += COMBO_H + 10.0;
 
     if windows {
         // Edition
-        p.text(combo_x, y, crate::locale::tr(lang, "Edition"), 12.0, TEXT, false);
+        p.text(
+            combo_x,
+            y,
+            crate::locale::tr(lang, "Edition"),
+            12.0,
+            TEXT,
+            false,
+        );
         y += 15.0;
         let ed_text = combo_text(d, DD::DlEdition);
-        let r = Rect { x: combo_x, y, w: combo_w, h: COMBO_H };
-        App::draw_combo(p, r, &ed_text, clickable, ui.open_dd == Some(DD::DlEdition), mouse);
+        let r = Rect {
+            x: combo_x,
+            y,
+            w: combo_w,
+            h: COMBO_H,
+        };
+        App::draw_combo(
+            p,
+            r,
+            &ed_text,
+            clickable,
+            ui.open_dd == Some(DD::DlEdition),
+            mouse,
+        );
         combo_rects.push((DD::DlEdition, r));
         ui.widgets.push((r, Widget::Combo(DD::DlEdition)));
         y += COMBO_H + 10.0;
 
         // Language (fetched live from Microsoft, like Fido)
-        p.text(combo_x, y, crate::locale::tr(lang, "Language"), 12.0, TEXT, false);
+        p.text(
+            combo_x,
+            y,
+            crate::locale::tr(lang, "Language"),
+            12.0,
+            TEXT,
+            false,
+        );
         y += 15.0;
         let lang_text = combo_text(d, DD::DlLanguage);
-        let r = Rect { x: combo_x, y, w: combo_w, h: COMBO_H };
+        let r = Rect {
+            x: combo_x,
+            y,
+            w: combo_w,
+            h: COMBO_H,
+        };
         let lang_enabled = clickable && d.langs.is_ready();
-        App::draw_combo(p, r, &lang_text, lang_enabled, ui.open_dd == Some(DD::DlLanguage), mouse);
+        App::draw_combo(
+            p,
+            r,
+            &lang_text,
+            lang_enabled,
+            ui.open_dd == Some(DD::DlLanguage),
+            mouse,
+        );
         combo_rects.push((DD::DlLanguage, r));
         ui.widgets.push((r, Widget::Combo(DD::DlLanguage)));
         y += COMBO_H + 10.0;
 
         // Architecture (x64 preselected, like Fido)
-        p.text(combo_x, y, crate::locale::tr(lang, "Architecture"), 12.0, TEXT, false);
+        p.text(
+            combo_x,
+            y,
+            crate::locale::tr(lang, "Architecture"),
+            12.0,
+            TEXT,
+            false,
+        );
         y += 15.0;
         let arch_text = combo_text(d, DD::DlArch);
-        let r = Rect { x: combo_x, y, w: combo_w, h: COMBO_H };
+        let r = Rect {
+            x: combo_x,
+            y,
+            w: combo_w,
+            h: COMBO_H,
+        };
         let arch_enabled = clickable && d.links.is_ready();
-        App::draw_combo(p, r, &arch_text, arch_enabled, ui.open_dd == Some(DD::DlArch), mouse);
+        App::draw_combo(
+            p,
+            r,
+            &arch_text,
+            arch_enabled,
+            ui.open_dd == Some(DD::DlArch),
+            mouse,
+        );
         combo_rects.push((DD::DlArch, r));
         ui.widgets.push((r, Widget::Combo(DD::DlArch)));
         y += COMBO_H + 6.0;
@@ -607,18 +738,51 @@ pub(super) fn render_dl(
         );
     } else {
         // Image variant (per-distro flavors/editions)
-        p.text(combo_x, y, crate::locale::tr(lang, "Image"), 12.0, TEXT, false);
+        p.text(
+            combo_x,
+            y,
+            crate::locale::tr(lang, "Image"),
+            12.0,
+            TEXT,
+            false,
+        );
         y += 15.0;
         let var_text = combo_text(d, DD::DlVariant);
-        let r = Rect { x: combo_x, y, w: combo_w, h: COMBO_H };
-        App::draw_combo(p, r, &var_text, clickable, ui.open_dd == Some(DD::DlVariant), mouse);
+        let r = Rect {
+            x: combo_x,
+            y,
+            w: combo_w,
+            h: COMBO_H,
+        };
+        App::draw_combo(
+            p,
+            r,
+            &var_text,
+            clickable,
+            ui.open_dd == Some(DD::DlVariant),
+            mouse,
+        );
         combo_rects.push((DD::DlVariant, r));
         ui.widgets.push((r, Widget::Combo(DD::DlVariant)));
         y += COMBO_H + 10.0;
 
         match &d.resolved {
-            Fetch::Idle => p.text(combo_x, y, crate::locale::tr(lang, "Select a distro and image."), 11.0, 0x808080, false),
-            Fetch::Loading => p.text(combo_x, y, crate::locale::tr(lang, "Looking up the official image…"), 11.0, 0x808080, false),
+            Fetch::Idle => p.text(
+                combo_x,
+                y,
+                crate::locale::tr(lang, "Select a distro and image."),
+                11.0,
+                0x808080,
+                false,
+            ),
+            Fetch::Loading => p.text(
+                combo_x,
+                y,
+                crate::locale::tr(lang, "Looking up the official image…"),
+                11.0,
+                0x808080,
+                false,
+            ),
             Fetch::Failed(e) => p.text(combo_x, y, &trunc(e, 68), 11.0, PROGRESS_ERR, false),
             Fetch::Ready(v) => p.text(
                 combo_x,
@@ -627,7 +791,11 @@ pub(super) fn render_dl(
                     &format!(
                         "{} — official SHA-256 {}",
                         v.file_name,
-                        if v.sha256.is_some() { "published ✓" } else { "not published" }
+                        if v.sha256.is_some() {
+                            "published ✓"
+                        } else {
+                            "not published"
+                        }
                     ),
                     68,
                 ),
@@ -643,18 +811,36 @@ pub(super) fn render_dl(
     match &d.phase {
         DlPhase::Idle => {}
         DlPhase::Downloading { done, total } => {
-            let track = Rect { x: combo_x, y: zone_y, w: combo_w, h: 14.0 };
+            let track = Rect {
+                x: combo_x,
+                y: zone_y,
+                w: combo_w,
+                h: 14.0,
+            };
             p.fill(track, 0xE8E8E8);
             p.frame(track, BORDER);
             let (frac, txt) = match total {
                 Some(t) if *t > 0 => (
                     (*done as f64 / *t as f64) as f32,
-                    format!("{} of {} ({:.0}%)", fmt_size(*done), fmt_size(*t), 100.0 * *done as f64 / *t as f64),
+                    format!(
+                        "{} of {} ({:.0}%)",
+                        fmt_size(*done),
+                        fmt_size(*t),
+                        100.0 * *done as f64 / *t as f64
+                    ),
                 ),
                 _ => (0.0, fmt_size(*done)),
             };
             if frac > 0.0 {
-                p.fill(Rect { x: track.x, y: track.y, w: (track.w * frac.min(1.0)).max(1.0), h: track.h }, ACCENT);
+                p.fill(
+                    Rect {
+                        x: track.x,
+                        y: track.y,
+                        w: (track.w * frac.min(1.0)).max(1.0),
+                        h: track.h,
+                    },
+                    ACCENT,
+                );
             }
             p.text(combo_x, track.y + 20.0, &txt, 11.0, 0x404040, false);
         }
@@ -666,12 +852,36 @@ pub(super) fn render_dl(
 
     // buttons: [⬇ DOWNLOAD / STOP] [Close]
     let by = panel.y + ph - 42.0;
-    let close = Rect { x: panel.x + pw - 100.0, y: by, w: 86.0, h: 30.0 };
-    App::draw_button(p, close, crate::locale::tr(lang, "Close"), true, mouse, false);
+    let close = Rect {
+        x: panel.x + pw - 100.0,
+        y: by,
+        w: 86.0,
+        h: 30.0,
+    };
+    App::draw_button(
+        p,
+        close,
+        crate::locale::tr(lang, "Close"),
+        true,
+        mouse,
+        false,
+    );
     ui.widgets.push((close, Widget::DlClose));
-    let dl_rect = Rect { x: panel.x + pw - 100.0 - 178.0 - 10.0, y: by, w: 178.0, h: 30.0 };
+    let dl_rect = Rect {
+        x: panel.x + pw - 100.0 - 178.0 - 10.0,
+        y: by,
+        w: 178.0,
+        h: 30.0,
+    };
     if d.busy() {
-        App::draw_button(p, dl_rect, crate::locale::tr(lang, "STOP"), true, mouse, false);
+        App::draw_button(
+            p,
+            dl_rect,
+            crate::locale::tr(lang, "STOP"),
+            true,
+            mouse,
+            false,
+        );
         ui.widgets.push((dl_rect, Widget::DlCancel));
     } else {
         let dl_label = format!("\u{2193} {}", crate::locale::tr(lang, "Download"));
@@ -720,7 +930,10 @@ mod tests {
             items_for_dialog(&d, DD::DlLanguage),
             vec!["English (United States)".to_string()]
         );
-        d.links = Fetch::Ready(vec![net::WinLink { arch: "x64".into(), url: "u".into() }]);
+        d.links = Fetch::Ready(vec![net::WinLink {
+            arch: "x64".into(),
+            url: "u".into(),
+        }]);
         assert_eq!(items_for_dialog(&d, DD::DlArch), vec!["x64".to_string()]);
     }
 

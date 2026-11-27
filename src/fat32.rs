@@ -7,15 +7,15 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 /// Geometry chosen by formatter.
 pub struct Fat32Params {
-    pub bytes_per_sector: u32,   // 512 or 4096
+    pub bytes_per_sector: u32, // 512 or 4096
     pub sectors_per_cluster: u32,
-    pub reserved_sectors: u32,   // 32 typical
-    pub num_fats: u32,           // 2
+    pub reserved_sectors: u32, // 32 typical
+    pub num_fats: u32,         // 2
     pub sectors_per_fat: u32,
-    pub root_cluster: u32,       // 2
+    pub root_cluster: u32, // 2
     pub total_sectors: u64,
-    pub fat_start: u64,          // LBA of FAT1
-    pub data_start: u64,         // LBA of data area
+    pub fat_start: u64,  // LBA of FAT1
+    pub data_start: u64, // LBA of data area
     pub total_clusters: u32,
 }
 
@@ -157,7 +157,10 @@ pub fn format_fat32<W: Write + Seek>(
 
     let mut fat = vec![0u8; fat_bytes as usize];
     // cluster 0: media descriptor in the low byte, reserved bits high
-    fat[0] = 0xF8; fat[1] = 0xFF; fat[2] = 0xFF; fat[3] = 0x0F;
+    fat[0] = 0xF8;
+    fat[1] = 0xFF;
+    fat[2] = 0xFF;
+    fat[3] = 0x0F;
     // cluster 1 = EOF; cluster 2 (root) = EOC
     fat[4..8].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
     let eoc: u32 = 0x0FFF_FFFF;
@@ -165,7 +168,9 @@ pub fn format_fat32<W: Write + Seek>(
     // mark all clusters EOF? No — free clusters are 0. Only used ones get values.
     // For a fresh FS: all clusters free (0), root dir cluster = EOC.
     for i in 0..p.num_fats {
-        w.seek(SeekFrom::Start((p.fat_start + i as u64 * p.sectors_per_fat as u64) * bps as u64))?;
+        w.seek(SeekFrom::Start(
+            (p.fat_start + i as u64 * p.sectors_per_fat as u64) * bps as u64,
+        ))?;
         w.write_all(&fat)?;
     }
     done += fat_total;
@@ -231,10 +236,10 @@ fn write_boot_sector(sec: &mut [u8], p: &Fat32Params, label: &str, hidden_sector
     s[44..48].copy_from_slice(&p.root_cluster.to_le_bytes());
     s[48..50].copy_from_slice(&1u16.to_le_bytes()); // FSInfo sector
     s[50..52].copy_from_slice(&6u16.to_le_bytes()); // backup boot sector
-    // drive number etc
+                                                    // drive number etc
     s[64] = 0x80;
     s[66] = 0x29; // extended boot signature
-    // volume ID — derive from label hash for determinism
+                  // volume ID — derive from label hash for determinism
     let vid = simple_hash(label.as_bytes());
     s[67..71].copy_from_slice(&vid.to_le_bytes());
     // volume label at 71..82 (11 bytes, space-padded)
@@ -277,7 +282,7 @@ fn write_volume_label_entry(root: &mut [u8], label: &str) {
     }
     e[0..11].copy_from_slice(&name);
     e[11] = 0x08; // ATTR_VOLUME_ID
-    // rest stays zero: no timestamps/clusters required for a label entry
+                  // rest stays zero: no timestamps/clusters required for a label entry
 }
 
 fn simple_hash(b: &[u8]) -> u32 {
@@ -381,8 +386,8 @@ impl FatVolume {
     }
 
     fn fat_entry<R: Read + Seek>(&self, r: &mut R, cluster: u32) -> Result<u32> {
-        let off = self.reserved_sectors as u64 * self.bytes_per_sector as u64
-            + u64::from(cluster) * 4;
+        let off =
+            self.reserved_sectors as u64 * self.bytes_per_sector as u64 + u64::from(cluster) * 4;
         r.seek(SeekFrom::Start(off))?;
         let mut b = [0u8; 4];
         r.read_exact(&mut b)?;
@@ -404,7 +409,8 @@ impl FatVolume {
             for slot in buf.as_chunks::<32>().0 {
                 match slot[0] {
                     0x00 => break 'clusters, // end-of-directory marker
-                    0xE5 => { // deleted
+                    0xE5 => {
+                        // deleted
                         lfn.clear();
                         continue;
                     }
@@ -485,10 +491,16 @@ impl FatVolume {
 
     /// 512-byte LBAs (volume-relative) covering the first
     /// `size.div_ceil(512)` sectors of the file at `first_cluster`.
-    pub fn file_lbas<R: Read + Seek>(&self, r: &mut R, first_cluster: u32, size: u64) -> Result<Vec<u64>> {
+    pub fn file_lbas<R: Read + Seek>(
+        &self,
+        r: &mut R,
+        first_cluster: u32,
+        size: u64,
+    ) -> Result<Vec<u64>> {
         let clusters = self.chain(r, first_cluster)?;
         let want = size.div_ceil(512) as usize;
-        let sectors_per_cluster = self.sectors_per_cluster as u64 * self.bytes_per_sector as u64 / 512;
+        let sectors_per_cluster =
+            self.sectors_per_cluster as u64 * self.bytes_per_sector as u64 / 512;
         let mut out = Vec::with_capacity(want);
         for c in clusters {
             let base = self.cluster_offset(c) / 512;
@@ -505,8 +517,12 @@ impl FatVolume {
 
 /// 8.3 short entry bytes -> display string ("LDLINUX SYS" -> "LDLINUX.SYS").
 fn short_name_str(short: &[u8; 11]) -> String {
-    let base = std::str::from_utf8(&short[0..8]).unwrap_or("________").trim_end();
-    let ext = std::str::from_utf8(&short[8..11]).unwrap_or("___").trim_end();
+    let base = std::str::from_utf8(&short[0..8])
+        .unwrap_or("________")
+        .trim_end();
+    let ext = std::str::from_utf8(&short[8..11])
+        .unwrap_or("___")
+        .trim_end();
     if ext.is_empty() {
         base.to_string()
     } else {
@@ -544,7 +560,11 @@ fn join_lfn(lfn: &[(u8, u8, [u16; 13])], sum: u8) -> Option<String> {
             _ => name.push(char::from_u32(u32::from(u)).unwrap_or('\u{FFFD}')),
         }
     }
-    if name.is_empty() { None } else { Some(name) }
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
 }
 
 #[cfg(test)]
@@ -564,17 +584,35 @@ mod tests {
         assert_eq!(p.num_fats, 2);
         assert_eq!(p.root_cluster, 2);
         assert_eq!(p.total_sectors, 64 * MIB / 512);
-        assert_eq!(compute_params(1024 * MIB, 512).unwrap().sectors_per_cluster, 8);
+        assert_eq!(
+            compute_params(1024 * MIB, 512).unwrap().sectors_per_cluster,
+            8
+        );
     }
 
     #[test]
     fn params_cluster_size_tiers() {
-        assert_eq!(compute_params(260 * MIB, 512).unwrap().sectors_per_cluster, 1);
+        assert_eq!(
+            compute_params(260 * MIB, 512).unwrap().sectors_per_cluster,
+            1
+        );
         assert_eq!(compute_params(8 * GIB, 512).unwrap().sectors_per_cluster, 8);
-        assert_eq!(compute_params(16 * GIB, 512).unwrap().sectors_per_cluster, 16);
-        assert_eq!(compute_params(32 * GIB, 512).unwrap().sectors_per_cluster, 32);
-        assert_eq!(compute_params(64 * GIB, 512).unwrap().sectors_per_cluster, 64);
-        assert_eq!(compute_params(128 * GIB, 512).unwrap().sectors_per_cluster, 128);
+        assert_eq!(
+            compute_params(16 * GIB, 512).unwrap().sectors_per_cluster,
+            16
+        );
+        assert_eq!(
+            compute_params(32 * GIB, 512).unwrap().sectors_per_cluster,
+            32
+        );
+        assert_eq!(
+            compute_params(64 * GIB, 512).unwrap().sectors_per_cluster,
+            64
+        );
+        assert_eq!(
+            compute_params(128 * GIB, 512).unwrap().sectors_per_cluster,
+            128
+        );
     }
 
     #[test]
@@ -596,7 +634,10 @@ mod tests {
         assert_eq!(v[13] as u32, p.sectors_per_cluster);
         assert_eq!(u16::from_le_bytes([v[14], v[15]]), 32); // reserved
         assert_eq!(v[16], 2); // FATs
-        assert_eq!(u32::from_le_bytes(v[36..40].try_into().unwrap()), p.sectors_per_fat);
+        assert_eq!(
+            u32::from_le_bytes(v[36..40].try_into().unwrap()),
+            p.sectors_per_fat
+        );
         assert_eq!(u32::from_le_bytes(v[28..32].try_into().unwrap()), 2048); // hidden
         assert_eq!(&v[82..90], b"FAT32   ");
         assert_eq!(&v[510..512], &[0x55, 0xAA]);
@@ -605,7 +646,7 @@ mod tests {
         assert_eq!(&v[512 + 484..512 + 488], b"rrAa");
         assert_eq!(&v[512 + 510..512 + 512], &[0x55, 0xAA]);
         assert_eq!(&v[512 + 496..512 + 508], &[0u8; 12]); // reserved2 untouched
-        // backup boot sector (sector 6) mirrors the primary
+                                                          // backup boot sector (sector 6) mirrors the primary
         assert_eq!(&v[0..512], &v[6 * 512..7 * 512]);
         // backup FSInfo (sector 7) mirrors the primary
         assert_eq!(&v[512..1024], &v[7 * 512..8 * 512]);
@@ -628,7 +669,9 @@ mod tests {
         let root_len = p.sectors_per_cluster as usize * 512;
         assert_eq!(v[root_off + 11], 0x08); // ATTR_VOLUME_ID
         assert_eq!(&v[root_off..root_off + 11], b"TEST       ");
-        assert!(v[root_off + 32..root_off + root_len].iter().all(|&b| b == 0));
+        assert!(v[root_off + 32..root_off + root_len]
+            .iter()
+            .all(|&b| b == 0));
     }
 
     #[test]
@@ -661,13 +704,19 @@ mod tests {
         let bytes = 64 * MIB;
         let mut buf = Cursor::new(vec![0u8; bytes as usize]);
         let mut calls: Vec<(u64, u64)> = Vec::new();
-        format_fat32(&mut buf, bytes, 512, "", 0, false, &mut |d, t| calls.push((d, t))).unwrap();
+        format_fat32(&mut buf, bytes, 512, "", 0, false, &mut |d, t| {
+            calls.push((d, t))
+        })
+        .unwrap();
         let (last_done, total) = *calls.last().unwrap();
         assert_eq!(last_done, total, "quick format must end at 100%");
         assert!(calls.iter().all(|&(_, t)| t == total), "total is constant");
         assert!(calls.windows(2).all(|w| w[0].0 <= w[1].0), "monotonic");
         // metadata only — nowhere near the 64 MiB partition size
-        assert!(total < bytes / 2, "total {total} must be the written metadata");
+        assert!(
+            total < bytes / 2,
+            "total {total} must be the written metadata"
+        );
         assert!(calls.len() >= 3, "one callback per format step");
     }
 
@@ -704,7 +753,7 @@ mod tests {
         assert_eq!(&v[4094..4096], &[0x55, 0xAA]);
         assert_eq!(v[11..13], [0x00, 0x10]); // BPB bytes-per-sector = 4096 LE
         assert_eq!(u32::from_le_bytes(v[28..32].try_into().unwrap()), 256); // hidden
-        // FSInfo sits in reserved sector 1 (bytes 4096..8192), trail sig @510
+                                                                            // FSInfo sits in reserved sector 1 (bytes 4096..8192), trail sig @510
         assert_eq!(&v[4096..4100], b"RRaA");
         assert_eq!(&v[4096 + 484..4096 + 488], b"rrAa");
         assert_eq!(&v[4096 + 510..4096 + 512], &[0x55, 0xAA]);
@@ -727,8 +776,16 @@ mod tests {
         fn new() -> Self {
             let bytes = 64 * MIB;
             let mut buf = vec![0u8; bytes as usize];
-            let p = format_fat32(&mut Cursor::new(&mut buf[..]), bytes, 512, "V", 0, false, &mut |_, _| {})
-                .unwrap();
+            let p = format_fat32(
+                &mut Cursor::new(&mut buf[..]),
+                bytes,
+                512,
+                "V",
+                0,
+                false,
+                &mut |_, _| {},
+            )
+            .unwrap();
             Vol { p, buf }
         }
         fn fat(&self, c: u32) -> u32 {
@@ -844,8 +901,16 @@ mod tests {
         let alias = b"I386~1     ";
         let sum = lfn_checksum(alias);
         let units = lfn_units("i386-pc");
-        vol.put_entry(boot_c, 0, &Vol::lfn_entry(0x40 | units.len() as u8, &units[0], sum));
-        vol.put_entry(boot_c, 1, &Vol::short_entry(alias, ATTR_DIRECTORY, i386_c, 0));
+        vol.put_entry(
+            boot_c,
+            0,
+            &Vol::lfn_entry(0x40 | units.len() as u8, &units[0], sum),
+        );
+        vol.put_entry(
+            boot_c,
+            1,
+            &Vol::short_entry(alias, ATTR_DIRECTORY, i386_c, 0),
+        );
         // /boot/i386-pc/core.img — 8.3 short name, contiguous chain of 86
         // clusters (44_000 bytes at 1 sector/cluster)
         let core_c = vol.alloc(86);

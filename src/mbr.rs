@@ -196,8 +196,18 @@ mod tests {
     #[test]
     fn build_parse_roundtrip() {
         let parts = vec![
-            Partition { bootable: true, fs: FsType::Fat32Lba, start_lba: 2048, sectors: 1_000_000 },
-            Partition { bootable: false, fs: FsType::Linux, start_lba: 1_002_048, sectors: 524_288 },
+            Partition {
+                bootable: true,
+                fs: FsType::Fat32Lba,
+                start_lba: 2048,
+                sectors: 1_000_000,
+            },
+            Partition {
+                bootable: false,
+                fs: FsType::Linux,
+                start_lba: 1_002_048,
+                sectors: 524_288,
+            },
         ];
         let sec = build_mbr(&parts, None, 0xDEAD_BEEF, 255, 63);
         assert!(valid_signature(&sec));
@@ -212,7 +222,7 @@ mod tests {
         assert_eq!(parsed[1].start_lba, 1_002_048);
         assert_eq!(parsed[1].sectors, 524_288);
         assert_eq!(sig, 0xAA55); // boot signature
-        // disk signature: parse_mbr returns the low 16 bits at 0x1B8
+                                 // disk signature: parse_mbr returns the low 16 bits at 0x1B8
         assert_eq!(disk_sig, 0xBEEF);
     }
 
@@ -220,7 +230,12 @@ mod tests {
     fn rufus_extra_partition_type_roundtrip() {
         // the old-BIOS-fixes "BIOS Compatibility" partition (type 0xEA)
         let sec = build_mbr(
-            &[Partition { bootable: false, fs: FsType::RufusExtra, start_lba: 130_977, sectors: 63 }],
+            &[Partition {
+                bootable: false,
+                fs: FsType::RufusExtra,
+                start_lba: 130_977,
+                sectors: 63,
+            }],
             None,
             1,
             255,
@@ -239,7 +254,12 @@ mod tests {
     fn boot_code_and_signature_placement() {
         let code = vec![0x90u8; 440];
         let sec = build_mbr(
-            &[Partition { bootable: true, fs: FsType::Fat32Lba, start_lba: 2048, sectors: 100 }],
+            &[Partition {
+                bootable: true,
+                fs: FsType::Fat32Lba,
+                start_lba: 2048,
+                sectors: 100,
+            }],
             Some(&code),
             0x1122_3344,
             255,
@@ -272,7 +292,12 @@ mod tests {
         gpt[0x1CA..0x1CE].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
         assert!(matches!(detect_style(&gpt), PartitionStyle::Gpt));
         let mbr = build_mbr(
-            &[Partition { bootable: true, fs: FsType::Fat32Lba, start_lba: 2048, sectors: 1000 }],
+            &[Partition {
+                bootable: true,
+                fs: FsType::Fat32Lba,
+                start_lba: 2048,
+                sectors: 1000,
+            }],
             None,
             1,
             255,
