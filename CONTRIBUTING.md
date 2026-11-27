@@ -17,7 +17,9 @@ cargo build --locked --release
 # binary: target/release/rufus-linux
 ```
 
-CI runs the same commands on `ubuntu-latest`.
+CI runs the same commands plus `cargo fmt --check` on `ubuntu-latest`, and a
+non-blocking `cargo audit` job and a `cargo deny` license check in separate
+jobs.
 
 ## Testing
 
@@ -25,7 +27,7 @@ CI runs the same commands on `ubuntu-latest`.
 cargo test
 ```
 
-The test suite (128 unit tests) must run **without root and without real
+The test suite (133 unit tests) must run **without root and without real
 block devices** — it uses in-memory images and fixture files only. Please keep
 it that way: never add a test that writes to a real device or requires
 privileges.
@@ -39,10 +41,14 @@ system.
 
 ```sh
 cargo clippy -- -D warnings   # zero-warning policy; CI enforces it
+cargo fmt --check             # rustfmt-clean tree; CI enforces it
 ```
 
-Formatting is not currently enforced: `cargo fmt --check` fails on the
-existing tree, so do not reformat unrelated code in a feature change.
+Run `cargo fmt` before committing, and keep formatting-only rewrites out of
+feature changes (the tree-wide formatting commit is listed in
+`.git-blame-ignore-revs` so `git blame` stays clean). The tree uses default
+rustfmt style; the generated language table in `src/locale/langs.rs` is
+excluded via `#[rustfmt::skip]`.
 
 ## Proposing changes
 
