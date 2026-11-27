@@ -1,0 +1,26 @@
+# cargo-deny configuration: licenses only.
+# Advisories are covered by the `audit` job in ci.yml; duplicate-version
+# bans are deliberately not enforced (see `cargo tree -d`).
+#
+# The workspace crate is GPL-3.0-only. Every license allowed below is
+# GPL-3.0-compatible (gnu.org/licenses/license-list.en.html); the list
+# covers every SPDX expression present in the dependency tree. License
+# expressions offering MIT/Apache-2.0 alternatives (e.g. r-efi's
+# "MIT OR Apache-2.0 OR LGPL-2.1-or-later") are satisfied without
+# allowing LGPL.
+
+[licenses]
+version = 2
+allow = [
+    "GPL-3.0-only", # the workspace crate itself
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "ISC",
+    "0BSD",
+    "BSL-1.0",
+    "Zlib",
+    "Unlicense",
+    "MPL-2.0",
+    "Unicode-3.0",
+]
