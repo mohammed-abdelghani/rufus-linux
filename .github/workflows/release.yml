@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 env:
-  MAINTAINER: "Mohamed Abdel-Ghani El-Sayed <353394032+mohammed-abdelghani@users.noreply.github.com>"
+  MAINTAINER: "Mohammed Abdelghani <353394032+mohammed-abdelghani@users.noreply.github.com>"
   HOMEPAGE: "https://github.com/mohammed-abdelghani/rufus-linux"
   GLIBC_FLOOR: "2.34"
 
