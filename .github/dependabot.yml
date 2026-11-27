@@ -4,17 +4,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    ignore:
-      # The RustCrypto digest 0.11 rework changes the Digest API
-      # (Md5::new()/Sha256::new() trait bounds) and needs a code migration;
-      # until that happens, major 0.11+ bumps of these crates only open
-      # PRs that break the build.
-      - dependency-name: "sha1"
-        versions: [">= 0.11"]
-      - dependency-name: "sha2"
-        versions: [">= 0.11"]
-      - dependency-name: "md-5"
-        versions: [">= 0.11"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
