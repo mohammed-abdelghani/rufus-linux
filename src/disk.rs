@@ -21,13 +21,17 @@ pub struct Disk {
     pub sector_size: u64,
 }
 
+// Mirror of the UAPI `struct hd_geometry` (linux/hdreg.h): heads, sectors,
+// cylinders, then `unsigned long start`. On LP64 `start` is 8 bytes and the
+// struct is 16 bytes (with 4 bytes of padding after `cylinders`); on 32-bit
+// it is 8 bytes with `start` at offset 4. `#[repr(C)]` reproduces that
+// layout exactly, which the layout test below checks.
 #[repr(C)]
 struct HdGeometry {
     heads: u8,
     sectors: u8,
     cylinders: u16,
-    start: u32,
-    size: u32,
+    start: libc::c_ulong,
 }
 
 impl Disk {
@@ -124,16 +128,14 @@ impl Disk {
             sectors: 0,
             cylinders: 0,
             start: 0,
-            size: 0,
         };
-        // SAFETY: TODO(owner): invariant NOT verified — the `HdGeometry`
-        // mirror above is 12 bytes (u8, u8, u16, u32, u32), but the UAPI
-        // `struct hd_geometry` (linux/hdreg.h) has 4 fields (u8 heads,
-        // u8 sectors, u16 cylinders, unsigned long start) and is 16 bytes
-        // on LP64 with `start` at offset 8. If HDIO_GETGEO (0x0301)
-        // succeeds, the kernel writes sizeof(struct hd_geometry) = 16
-        // bytes through the pointer, i.e. 4 bytes past `&mut g`. The Rust
-        // struct must mirror the UAPI layout before this call is sound.
+        // SAFETY: `HdGeometry` above has the same layout as the kernel's
+        // `struct hd_geometry` (linux/hdreg.h): 16 bytes on LP64 with
+        // `start` (`unsigned long`) at offset 8, 8 bytes on 32-bit with
+        // `start` at offset 4 — verified by hd_geometry_layout below.
+        // `&mut g` is therefore a valid, writable, properly aligned local
+        // of exactly the size HDIO_GETGEO (0x0301) writes through its
+        // pointer, and `self.file`'s raw fd is valid for the call.
         let r = unsafe { libc::ioctl(self.file.as_raw_fd(), HDIO_GETGEO as libc::Ioctl, &mut g) };
         if r == 0 && g.heads > 0 {
             (g.cylinders, g.heads, g.sectors)
@@ -247,5 +249,27 @@ mod tests {
         // empty image
         let mut cur = Cursor::new(vec![0u8; 512]);
         assert!(matches!(inspect_table(&mut cur).unwrap(), TableInfo::Empty));
+    }
+
+    /// The HDIO_GETGEO buffer must mirror the kernel's `struct hd_geometry`
+    /// exactly (linux/hdreg.h): heads, sectors, cylinders, then
+    /// `unsigned long start`. The expected sizes/offsets below follow from
+    /// the kernel header's field types, not from this program's output:
+    /// on LP64 `start` is 8 bytes, so the struct is 16 bytes with `start`
+    /// at offset 8; on 32-bit targets it is 8 bytes with `start` at
+    /// offset 4.
+    #[test]
+    fn hd_geometry_layout_matches_kernel_struct() {
+        assert_eq!(
+            std::mem::size_of::<libc::c_ulong>(),
+            std::mem::size_of::<usize>()
+        );
+        if cfg!(target_pointer_width = "64") {
+            assert_eq!(std::mem::size_of::<HdGeometry>(), 16);
+            assert_eq!(std::mem::offset_of!(HdGeometry, start), 8);
+        } else if cfg!(target_pointer_width = "32") {
+            assert_eq!(std::mem::size_of::<HdGeometry>(), 8);
+            assert_eq!(std::mem::offset_of!(HdGeometry, start), 4);
+        }
     }
 }

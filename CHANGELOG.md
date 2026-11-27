@@ -27,8 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The tree is rustfmt-formatted and `cargo fmt --check` is enforced in CI;
   the formatting commit is excluded from `git blame`.
 
-None of the above changes runtime behavior; only packaging size, source
-formatting, developer docs and CI are affected.
+The Added and Changed entries above do not change runtime behavior; only
+packaging size, source formatting, developer docs and CI are affected.
+
+### Fixed
+
+- The HDIO_GETGEO ioctl buffer (`HdGeometry` in `disk.rs`) was smaller than
+  the kernel's `struct hd_geometry` on 64-bit Linux, so a successful ioctl
+  wrote 4 bytes past the buffer; the Rust mirror now matches the kernel
+  layout (16 bytes on LP64), verified by a layout test.
 
 ## [0.1.0] - 2026-11-22
 
