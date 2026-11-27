@@ -383,13 +383,17 @@ call for testing on real hardware remain untested.
 
 ```sh
 cargo build --locked --release   # build
-cargo test                       # 128 unit tests (no root needed)
+cargo test                       # 133 unit tests (no root needed)
 cargo clippy -- -D warnings      # zero-warning policy
+cargo fmt --check                # rustfmt-clean tree
 ```
 
-CI builds, lints and tests on every push to `main`. Tag pushes and manual runs
-of the *Release* workflow build `.tar.gz`, `.deb` and `.rpm` packages for all
-four architectures and attach them to the GitHub release.
+CI builds, lints, checks formatting and tests on every push to `main`. A
+non-blocking `cargo audit` job reports RustSec advisories, and `cargo deny`
+checks dependency licenses against an allow-list compatible with this
+project's GPL-3.0-only licensing. Tag pushes and manual runs of the *Release*
+workflow build `.tar.gz`, `.deb` and `.rpm` packages for all four
+architectures and attach them to the GitHub release.
 
 ---
 
