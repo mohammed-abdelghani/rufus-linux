@@ -41,6 +41,10 @@ impl Disk {
             .with_context(|| format!("cannot open {path} (need root)"))?;
         let fd = file.as_raw_fd();
         let mut size: u64 = 0;
+        // SAFETY: `fd` is the valid descriptor of the device file opened
+        // above; BLKGETSIZE64 is _IOR(0x12, 114, size_t) (linux/fs.h), so
+        // the kernel writes exactly one `size_t` (= u64 on LP64) through
+        // the pointer, and `&mut size` is a valid, aligned `u64`.
         unsafe {
             if libc::ioctl(fd, BLKGETSIZE64 as libc::Ioctl, &mut size) != 0 {
                 // fallback: seek to end
@@ -59,6 +63,10 @@ impl Disk {
     fn get_sector_size(file: &File) -> Option<u64> {
         // BLKSSZGET = 0x1268
         let mut sz: libc::c_int = 0;
+        // SAFETY: `file` is an open `File`, so its raw fd is valid for the
+        // duration of the call; BLKSSZGET is _IO(0x12, 104) (linux/fs.h),
+        // which writes a single C `int` (the logical sector size) through
+        // the pointer, and `&mut sz` is a valid, aligned `c_int`.
         let r = unsafe { libc::ioctl(file.as_raw_fd(), 0x1268, &mut sz) };
         if r == 0 && sz > 0 {
             Some(sz as u64)
@@ -82,6 +90,10 @@ impl Disk {
 
     /// Re-read partition table from kernel after we wrote it.
     pub fn reread_partitions(&self) -> Result<()> {
+        // SAFETY: `self.file` is an open `File`, so its raw fd is valid;
+        // BLKRRPART is _IO(0x12, 95) (linux/fs.h) and takes no pointer —
+        // the kernel dereferences nothing, so beyond the valid fd no
+        // memory invariant applies.
         let r = unsafe { libc::ioctl(self.file.as_raw_fd(), BLKRRPART as libc::Ioctl, 0) };
         if r != 0 {
             let e = std::io::Error::last_os_error();
@@ -114,6 +126,14 @@ impl Disk {
             start: 0,
             size: 0,
         };
+        // SAFETY: TODO(owner): invariant NOT verified — the `HdGeometry`
+        // mirror above is 12 bytes (u8, u8, u16, u32, u32), but the UAPI
+        // `struct hd_geometry` (linux/hdreg.h) has 4 fields (u8 heads,
+        // u8 sectors, u16 cylinders, unsigned long start) and is 16 bytes
+        // on LP64 with `start` at offset 8. If HDIO_GETGEO (0x0301)
+        // succeeds, the kernel writes sizeof(struct hd_geometry) = 16
+        // bytes through the pointer, i.e. 4 bytes past `&mut g`. The Rust
+        // struct must mirror the UAPI layout before this call is sound.
         let r = unsafe { libc::ioctl(self.file.as_raw_fd(), HDIO_GETGEO as libc::Ioctl, &mut g) };
         if r == 0 && g.heads > 0 {
             (g.cylinders, g.heads, g.sectors)

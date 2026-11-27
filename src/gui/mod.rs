@@ -663,6 +663,8 @@ enum Widget {
 
 pub fn run(locale_override: Option<usize>) -> Result<()> {
     // need root for raw disk access
+    // SAFETY: `geteuid` takes no arguments and only returns the effective
+    // uid; no pointers are passed, so there is no memory invariant.
     if unsafe { libc::geteuid() } != 0 && std::env::var_os("RUFUS_LINUX_NOROOT").is_none() {
         // try pkexec relaunch once — pkexec resets the environment, so the
         // display/session variables must be forwarded explicitly or the

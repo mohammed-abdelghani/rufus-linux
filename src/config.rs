@@ -184,7 +184,15 @@ pub fn ctime_now() -> String {
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let secs = secs as libc::time_t;
+    // SAFETY: `libc::tm` is a plain C struct of integer fields with no
+    // niches, padding-sensitive invariants or references, so the
+    // all-zeroes bit pattern is a valid value to hand to C code (which
+    // `localtime_r` then populates).
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    // SAFETY: `secs` is a valid, aligned `libc::time_t` and `&mut tm` a
+    // valid, aligned `tm`; `localtime_r` writes only through its two
+    // parameters and returns a pointer into `tm` or null, which the code
+    // checks.
     if unsafe { libc::localtime_r(&secs, &mut tm) }.is_null() {
         return "[timestamp unavailable]".into();
     }
