@@ -1707,7 +1707,15 @@ impl Engine {
             let mut f = std::fs::File::open(mnt.join(&e.path))
                 .with_context(|| format!("verify: file missing on target: {}", e.path))?;
             let mut h_tgt = Sha256::new();
-            std::io::copy(&mut f, &mut h_tgt)?;
+            // digest 0.11 hashers no longer implement std::io::Write, so
+            // hash the copied file with an explicit read loop.
+            loop {
+                let n = f.read(&mut buf)?;
+                if n == 0 {
+                    break;
+                }
+                h_tgt.update(&buf[..n]);
+            }
             if h_iso.finalize() != h_tgt.finalize() {
                 bail!("verify failed: {} content mismatch", e.path);
             }

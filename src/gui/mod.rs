@@ -406,6 +406,12 @@ enum HashState {
     Failed(String),
 }
 
+/// Lowercase hex encoding of digest output (digest 0.11 no longer
+/// implements `LowerHex` for its output arrays).
+fn digest_hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
 /// Stream the image through all four digests (like Rufus's hash dialog).
 fn compute_image_hashes(path: &std::path::Path) -> Result<HashInfo> {
     use std::io::Read as _;
@@ -424,10 +430,10 @@ fn compute_image_hashes(path: &std::path::Path) -> Result<HashInfo> {
         s512.update(&buf[..n]);
     }
     Ok(HashInfo {
-        md5: format!("{:x}", m5.finalize()),
-        sha1: format!("{:x}", s1.finalize()),
-        sha256: format!("{:x}", s256.finalize()),
-        sha512: format!("{:x}", s512.finalize()),
+        md5: digest_hex(&m5.finalize()),
+        sha1: digest_hex(&s1.finalize()),
+        sha256: digest_hex(&s256.finalize()),
+        sha512: digest_hex(&s512.finalize()),
     })
 }
 

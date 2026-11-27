@@ -26,9 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by about 25%.
 - The tree is rustfmt-formatted and `cargo fmt --check` is enforced in CI;
   the formatting commit is excluded from `git blame`.
+- sha1, sha2 and md-5 upgraded to the digest 0.11 series: the image-hash
+  dialog now hex-encodes digest output explicitly and the copy-verify path
+  hashes with an explicit read loop (digest 0.11 hashers no longer
+  implement `std::io::Write`). Digest results are unchanged — the
+  known-vector tests still pass.
 
-The Added and Changed entries above do not change runtime behavior; only
-packaging size, source formatting, developer docs and CI are affected.
+None of the entries above changes observable runtime behavior: packaging
+size, source formatting, developer docs and CI are the only visible changes,
+and the digest upgrade produces byte-identical hash results (verified by the
+known-vector tests).
 
 ### Fixed
 
