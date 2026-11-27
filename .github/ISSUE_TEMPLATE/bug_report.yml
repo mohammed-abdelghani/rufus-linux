@@ -1,0 +1,88 @@
+name: Bug report
+description: Report a problem with rufus-linux
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do not paste private
+        data (disk serial numbers, hostnames, personal file names) into this
+        form. For security vulnerabilities, see SECURITY.md instead.
+  - type: input
+    id: version
+    attributes:
+      label: rufus-linux version or release
+      description: Output of `rufus-linux --version`, or the release/tag you installed.
+      placeholder: "e.g. v0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - Prebuilt package (.deb / .rpm / .tar.gz)
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distro and kernel
+      description: e.g. "Debian 13, kernel 6.12" — `cat /etc/os-release && uname -r`
+      placeholder: "Distro + kernel version"
+    validations:
+      required: true
+  - type: dropdown
+    id: session
+    attributes:
+      label: Desktop session
+      options:
+        - X11
+        - XWayland (Wayland session)
+        - Wayland (native)
+        - CLI only / no desktop session
+        - Other / not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface used
+      options:
+        - GUI
+        - CLI
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Exact command or steps to reproduce
+      description: For the CLI, paste the full command. For the GUI, describe each click.
+      placeholder: |
+        sudo rufus-linux write /dev/sdb image.iso --gpt
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include any error messages verbatim.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: From ~/.config/rufus-linux/rufus.log or stderr. Redact private data first.
+      render: shell
+    validations:
+      required: false
