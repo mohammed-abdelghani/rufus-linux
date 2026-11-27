@@ -31,6 +31,17 @@
     <mediatype>application/x-iso9660-image</mediatype>
   </provides>
   <releases>
+    <release version="0.1.1" date="2026-11-27">
+      <url type="details">https://github.com/mohammed-abdelghani/rufus-linux/releases/tag/v0.1.1</url>
+      <description>
+        <p>Bug-fix and maintenance release.</p>
+        <ul>
+          <li>HDIO_GETGEO ioctl buffer now matches the kernel struct hd_geometry layout (no more out-of-bounds write on 64-bit)</li>
+          <li>Release binaries are stripped and built with thin LTO (about 25% smaller)</li>
+          <li>Digest crates upgraded to the 0.11 series (identical hash results)</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-11-22">
       <url type="details">https://github.com/mohammed-abdelghani/rufus-linux/releases/tag/v0.1.0</url>
       <description>
