@@ -5,6 +5,9 @@ edition = "2021"
 description = "Linux rewrite of Rufus - create bootable USB drives"
 license = "GPL-3.0-only"
 repository = "https://github.com/mohammed-abdelghani/rufus-linux"
+readme = "README.md"
+keywords = ["rufus", "bootable-usb", "usb", "iso", "windows-to-go"]
+categories = ["command-line-utilities", "filesystem"]
 
 [dependencies]
 winit = { version = "0.30", default-features = false, features = ["x11", "rwh_06"] }
