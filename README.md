@@ -405,6 +405,8 @@ Rufus — this project follows its architecture and reuses its attitude.
 | `freedos/` — KERNEL.SYS, COMMAND.COM | [FreeDOS](https://www.freedos.org) | GPL-3.0 |
 | `boot.img`, `core.img` | [GRUB2](https://www.gnu.org/software/grub/) | GPL-3.0 |
 
+Full provenance for every bundled file is documented in [ASSETS.md](ASSETS.md).
+
 Pure-Rust GUI stack: [winit](https://github.com/rust-windowing/winit),
 [softbuffer](https://github.com/rust-windowing/softbuffer),
 [ab_glyph](https://github.com/alexheretic/ab-glyph),
