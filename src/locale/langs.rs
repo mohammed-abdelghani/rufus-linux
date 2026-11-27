@@ -2,6 +2,8 @@
 //! English (the source locale) comes first, then every po locale in order.
 use super::Lang;
 
+// Generated table; keep the one-locale-per-line layout from the generator.
+#[rustfmt::skip]
 pub const LANGS: &[Lang] = &[
     Lang { code: "en", name: "English", rtl: false },
     Lang { code: "ar-SA", name: "Arabic (العربية)", rtl: true },
