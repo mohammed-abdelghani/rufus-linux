@@ -17,7 +17,7 @@ in a single 9 MB binary. No GTK. No Qt. No Electron.
 
 <br>
 
-<img src="https://cdn.jsdelivr.net/gh/mohammed-abdelghani/rufus-linux@main/assets/screenshot-main.png" alt="rufus-linux main window — the Rufus dialog on Linux" width="620">
+<img src="assets/screenshot-main.png" alt="rufus-linux main window — the Rufus dialog on Linux" width="620">
 
 <br>
 
@@ -25,19 +25,26 @@ in a single 9 MB binary. No GTK. No Qt. No Electron.
 
 </div>
 
+rufus-linux is an independent, from-scratch project. It is not affiliated
+with, endorsed by, or produced by the Rufus project or Pete Batard.
+
+**Name:** this project's repository is
+<https://github.com/mohammed-abdelghani/rufus-linux>. The upstream
+[Rufus](https://github.com/pbatard/rufus) it takes its name and workflow from
+is a Windows application.
+
 ---
 
 ## Why
 
 Every Linux user knows the pain: Rufus is the best USB-imaging tool ever made — and
-it only runs on Windows. The Linux alternatives each cover a slice of the job, and
-none of them cover the whole workflow:
+it only runs on Windows. The Linux alternatives each cover a slice of the job:
 
-- **balenaEtcher** flashes raw images — but can't lay out a proper partitioned,
+- **balenaEtcher** flashes raw images — it does not lay out a proper partitioned,
   file-copied Windows/Linux install stick.
 - **WoeUSB-ng** handles one thing: a subset of Windows ISOs.
 - **Ventoy** takes over your drive with its own bootloader and menu — great for
-  multiboot, but it's not a real installer stick.
+  multiboot, but it is not a classic installer stick.
 
 **rufus-linux** ports the entire Rufus workflow to Linux: the write modes, the
 partition layouts, the Windows To Go engine, the hidden settings, the bad-block
@@ -67,12 +74,15 @@ Win32-style theme.
 
 ## Contents
 
+- [Why](#why)
 - [Features](#features)
 - [Installation](#installation)
+- [Requirements](#requirements)
 - [Usage](#usage)
 - [How it compares](#how-it-compares)
 - [Localization](#localization)
 - [Roadmap](#roadmap)
+- [FAQ / Troubleshooting](#faq--troubleshooting)
 - [Development](#development)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
@@ -126,6 +136,10 @@ The split-SELECT dropdown opens Rufus 4.6's download flow:
 - Progress bar, STOP button, SHA-256 verification, auto-select on finish.
 
 ### Safety
+
+Writing to a drive erases everything on it. rufus-linux confirms before every
+write and refuses the device hosting the running root filesystem unless
+`--force` is used — always double-check the selected device.
 
 - Confirms before every write; **STOP** button cancels a write mid-flight.
 - Refuses to touch the device that hosts the running root filesystem
@@ -210,6 +224,20 @@ plus X11 headers is all it needs.
 
 ---
 
+## Requirements
+
+- **Linux with X11.** On Wayland sessions the GUI runs under XWayland like most
+  desktop apps; a native Wayland backend is planned, not shipped.
+- **glibc ≥ 2.34** for the prebuilt packages (see Installation).
+- **Root or `pkexec` for writes** — writing to block devices needs elevated
+  privileges; the GUI relaunches itself through `pkexec` automatically, and the
+  CLI examples use `sudo`.
+- **Optional runtime helpers:** `wimlib-imagex` (Windows `install.wim` > 4 GiB /
+  Windows To Go), `mkfs.ntfs` + `mkfs.exfat` (NTFS/exFAT targets), `zenity`
+  (file picker), `curl` (ISO downloads).
+
+---
+
 ## Usage
 
 ### GUI
@@ -284,6 +312,10 @@ sudo rufus-linux write /dev/sdb --mode freedos --yes
 *Rufus itself remains the gold standard — on Windows. rufus-linux brings that
 standard to Linux.*
 
+> Feature comparisons for other tools reflect the authors' understanding of
+> those projects and are not independently verified against their current
+> releases.
+
 ---
 
 ## Localization
@@ -313,6 +345,37 @@ Planned:
 - [ ] VHD / WinPE modes
 - [ ] Wayland-native backend (X11/XWayland only today)
 - [ ] End-to-end Windows To Go boot verification in QEMU (OVMF + SeaBIOS)
+
+**Project status:** v0.1.0 ships the features listed under *Shipped in v0.1*.
+Everything under *Planned* is not implemented yet, and the roadmap items that
+call for testing on real hardware remain untested.
+
+---
+
+## FAQ / Troubleshooting
+
+- **Does it work on Wayland?** The GUI needs X11 today and runs under XWayland
+  on Wayland sessions; a native Wayland backend is on the roadmap.
+- **Why does it need root / `pkexec`?** Writes go to raw block devices, which
+  require elevated privileges on Linux. The GUI detects this and relaunches
+  itself through `pkexec`; for the CLI use `sudo`.
+- **It refuses the device I picked.** If the device hosts the running root
+  filesystem the tool refuses to overwrite it. Only pass `--force` if you are
+  certain the device is not in use.
+- **My USB drive is refused in the partitioned modes.** Drives with 4096-byte
+  (4Kn) logical sectors are only supported by the raw/DD mode for now; the
+  partitioned write modes require 512-byte-sector devices.
+- **How do I cancel a running write?** Press **STOP** in the GUI — a write can
+  be cancelled mid-flight. `--yes` skips the confirmation prompt entirely, so
+  only use it when you are sure.
+- **Where are settings and logs?** Settings persist in
+  `~/.config/rufus-linux/settings.json` and the session log in
+  `~/.config/rufus-linux/rufus.log`.
+- **Optional helpers are missing — what breaks?** Without `wimlib-imagex`,
+  `install.wim` files larger than 4 GiB cannot be split and Windows To Go is
+  unavailable; without `mkfs.ntfs`/`mkfs.exfat`, NTFS/exFAT targets are
+  unavailable; without `zenity` there is no file picker; without `curl`, ISO
+  downloads are unavailable.
 
 ---
 
