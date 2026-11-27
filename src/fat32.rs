@@ -955,4 +955,87 @@ mod tests {
         let e = v.find(&mut cur, "loop.sys").unwrap().unwrap();
         assert!(v.file_lbas(&mut cur, e.first_cluster, e.size).is_err());
     }
+
+    /// First data sector derived directly from the boot sector BPB
+    /// (Microsoft FAT spec): reserved sectors + both FATs. FAT32 keeps the
+    /// root directory in the data region, so nothing else precedes it.
+    fn bpb_data_start(buf: &[u8]) -> u32 {
+        let reserved = u16::from_le_bytes([buf[14], buf[15]]);
+        let nfats = buf[16] as u32;
+        let fat_size = u32::from_le_bytes(buf[36..40].try_into().unwrap());
+        reserved as u32 + nfats * fat_size
+    }
+
+    /// cluster_offset() and file_lbas() must agree with a layout computed
+    /// independently from the on-disk BPB, not from program state.
+    #[test]
+    fn cluster_offset_and_file_lbas_match_bpb_derived_layout() {
+        let mut vol = Vol::new();
+        let data_start = bpb_data_start(&vol.buf[..512]);
+        let first = vol.alloc(2); // 2 clusters; the 64 MiB volume has 1 sector/cluster
+                                  // Marker bytes at the spec-derived byte offsets of the chain.
+        let off1 = (data_start as usize + (first as usize - 2)) * 512;
+        vol.buf[off1] = 0xAA;
+        vol.buf[off1 + 512] = 0xBB;
+        let lbas = {
+            let mut cur = Cursor::new(&mut vol.buf[..]);
+            let v = FatVolume::open(&mut cur).unwrap();
+            // Cluster 2 is the first data cluster (FAT32 spec).
+            assert_eq!(v.cluster_offset(2), data_start as u64 * 512);
+            assert_eq!(v.cluster_offset(first), off1 as u64);
+            // A 1024-byte file fills both sectors of the 2-cluster chain.
+            v.file_lbas(&mut cur, first, 1024).unwrap()
+        };
+        assert_eq!(
+            lbas,
+            vec![
+                (data_start + first - 2) as u64,
+                (data_start + first - 1) as u64
+            ]
+        );
+        for (lba, mark) in lbas.iter().zip([0xAAu8, 0xBBu8]) {
+            assert_eq!(vol.buf[*lba as usize * 512], mark);
+        }
+    }
+
+    /// read_dir() must skip the volume-label and deleted entries, decode
+    /// 8.3 names and join LFN parts, and report cluster/size from the
+    /// directory entries.
+    #[test]
+    fn read_dir_skips_label_and_deleted_and_joins_lfn() {
+        let mut vol = Vol::new();
+        // slot 0: volume label written by format_fat32 ("V") — must be skipped
+        let f1 = vol.alloc(1);
+        vol.put_entry(
+            vol.p.root_cluster,
+            1,
+            &Vol::short_entry(b"AFILE   TXT", 0x20, f1, 33),
+        );
+        // slot 2: deleted entry (0xE5) — must be skipped
+        let mut del = Vol::short_entry(b"OLD     DAT", 0x20, 4, 1);
+        del[0] = 0xE5;
+        vol.put_entry(vol.p.root_cluster, 2, &del);
+        // slots 3/4: LFN "readme.txt" over a short alias
+        let f2 = vol.alloc(1);
+        let alias = b"README~1TXT";
+        let sum = lfn_checksum(alias);
+        let units = lfn_units("readme.txt");
+        assert_eq!(units.len(), 1); // 10 chars + NUL fit in one LFN unit
+        vol.put_entry(
+            vol.p.root_cluster,
+            3,
+            &Vol::lfn_entry(0x40 | units.len() as u8, &units[0], sum),
+        );
+        vol.put_entry(vol.p.root_cluster, 4, &Vol::short_entry(alias, 0x20, f2, 7));
+        let mut cur = Cursor::new(&mut vol.buf[..]);
+        let v = FatVolume::open(&mut cur).unwrap();
+        let entries = v.read_dir(&mut cur, v.root_cluster).unwrap();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["AFILE.TXT", "readme.txt"]);
+        assert_eq!(entries[0].first_cluster, f1);
+        assert_eq!(entries[0].size, 33);
+        assert_eq!(entries[1].first_cluster, f2);
+        assert_eq!(entries[1].size, 7);
+        assert!(entries.iter().all(|e| !e.is_dir));
+    }
 }

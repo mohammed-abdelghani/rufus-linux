@@ -510,4 +510,152 @@ mod tests {
             "expected Rock Ridge lowercase names (directories included)"
         );
     }
+
+    /// Recording date bytes for 2026-01-01 00:00:00 UTC (years since 1900).
+    const TEST_DATE: [u8; 7] = [126, 1, 1, 0, 0, 0, 0];
+    /// Independently known epoch value for 2026-01-01T00:00:00Z.
+    const TEST_DATE_UNIX: i64 = 1_767_225_600;
+
+    /// ECMA-119 9.1 directory record: 34-byte header + name + system use.
+    /// `name` is the raw ISO identifier; `su` the Rock Ridge system-use
+    /// area. The even-boundary pad byte (ECMA-119 9.1.6) is inserted
+    /// automatically between an odd-length identifier and `su`.
+    fn test_dir_record(extent: u32, size: u32, flags: u8, name: &[u8], su: &[u8]) -> Vec<u8> {
+        let name_end = 33 + name.len();
+        let su_start = (name_end + 1) & !1;
+        let mut r = vec![0u8; su_start + su.len()];
+        r[0] = r.len() as u8;
+        r[2..6].copy_from_slice(&extent.to_le_bytes());
+        r[6..10].copy_from_slice(&extent.to_be_bytes());
+        r[10..14].copy_from_slice(&size.to_le_bytes());
+        r[14..18].copy_from_slice(&size.to_be_bytes());
+        r[18..25].copy_from_slice(&TEST_DATE);
+        r[25] = flags;
+        r[28..30].copy_from_slice(&1u16.to_le_bytes());
+        r[30..32].copy_from_slice(&1u16.to_be_bytes());
+        r[32] = name.len() as u8;
+        r[33..33 + name.len()].copy_from_slice(name);
+        r[su_start..].copy_from_slice(su);
+        r
+    }
+
+    /// One RRIP "NM" entry (signature, length, version, flags, name),
+    /// padded to an even byte count.
+    fn test_nm_entry(name: &str) -> Vec<u8> {
+        let mut e = vec![b'N', b'M', (5 + name.len()) as u8, 1, 0];
+        e.extend_from_slice(name.as_bytes());
+        if e.len() % 2 != 0 {
+            e.push(0);
+        }
+        e
+    }
+
+    /// Hand-built minimal ECMA-119 image (PVD + root dir + subdir + two
+    /// files) read back through parse_iso/read_file/extract_file. Every
+    /// expected value below comes from the bytes written here or from the
+    /// ECMA-119 structure, never from the program's own output.
+    #[test]
+    fn parse_iso_generated_minimal_image_roundtrip() {
+        const SEC: usize = 2048;
+
+        let mut pvd = vec![0u8; SEC];
+        pvd[0] = 1;
+        pvd[1..6].copy_from_slice(b"CD001");
+        pvd[6] = 1;
+        // volume identifier, space-padded per ECMA-119 8.4.4
+        pvd[40..47].copy_from_slice(b"TESTISO");
+        for b in &mut pvd[47..72] {
+            *b = b' ';
+        }
+        pvd[128..130].copy_from_slice(&2048u16.to_le_bytes());
+        pvd[130..132].copy_from_slice(&2048u16.to_be_bytes());
+        // root directory record (34 bytes): sector 17, one sector long
+        let root = test_dir_record(17, SEC as u32, 0x02, b"\x00", &[]);
+        assert_eq!(root.len(), 34);
+        pvd[156..190].copy_from_slice(&root);
+
+        const README: &[u8] = b"hello rufus\n";
+        const DATA: [u8; 5] = [0, 1, 2, 3, 4];
+
+        let mut root_dir = Vec::new();
+        root_dir.extend(test_dir_record(17, SEC as u32, 0x02, b"\x00", &[]));
+        root_dir.extend(test_dir_record(17, SEC as u32, 0x02, b"\x01", &[]));
+        root_dir.extend(test_dir_record(
+            19,
+            12,
+            0,
+            b"README.;1",
+            &test_nm_entry("readme.txt"),
+        ));
+        root_dir.extend(test_dir_record(
+            18,
+            SEC as u32,
+            0x02,
+            b"SUB.;1",
+            &test_nm_entry("sub"),
+        ));
+
+        let mut sub_dir = Vec::new();
+        sub_dir.extend(test_dir_record(18, SEC as u32, 0x02, b"\x00", &[]));
+        sub_dir.extend(test_dir_record(18, SEC as u32, 0x02, b"\x01", &[]));
+        sub_dir.extend(test_dir_record(
+            20,
+            5,
+            0,
+            b"DATA.;1",
+            &test_nm_entry("data.bin"),
+        ));
+
+        let mut img = vec![0u8; 21 * SEC];
+        img[16 * SEC..17 * SEC].copy_from_slice(&pvd);
+        img[17 * SEC..18 * SEC][..root_dir.len()].copy_from_slice(&root_dir);
+        img[18 * SEC..19 * SEC][..sub_dir.len()].copy_from_slice(&sub_dir);
+        img[19 * SEC..19 * SEC + README.len()].copy_from_slice(README);
+        img[20 * SEC..20 * SEC + DATA.len()].copy_from_slice(&DATA);
+
+        let mut cur = std::io::Cursor::new(img);
+        let iso = parse_iso(&mut cur).unwrap();
+        assert_eq!(iso.volume_id, "TESTISO");
+        assert_eq!(iso.logical_block_size, 2048);
+        // No El Torito boot descriptor in this image
+        assert_eq!(iso.boot_catalog_lba, None);
+        assert_eq!(iso.entries.len(), 3);
+        let readme = iso
+            .entries
+            .iter()
+            .find(|e| e.path == "readme.txt")
+            .expect("readme.txt entry");
+        assert!(!readme.is_dir);
+        assert_eq!(readme.extent_lba, 19);
+        assert_eq!(readme.size, 12);
+        assert_eq!(readme.mtime, TEST_DATE_UNIX);
+        let sub = iso
+            .entries
+            .iter()
+            .find(|e| e.path == "sub")
+            .expect("sub entry");
+        assert!(sub.is_dir);
+        assert_eq!(sub.extent_lba, 18);
+        let data = iso
+            .entries
+            .iter()
+            .find(|e| e.path == "sub/data.bin")
+            .expect("sub/data.bin entry");
+        assert_eq!(data.extent_lba, 20);
+        assert_eq!(data.size, 5);
+        assert_eq!(data.mtime, TEST_DATE_UNIX);
+
+        let mut out = Vec::new();
+        read_file(&mut cur, readme, &mut out).unwrap();
+        assert_eq!(out, README);
+        let tmp = std::env::temp_dir().join(format!("rufus-linux-test-iso-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let dest = tmp.join("extracted-readme.txt");
+        assert_eq!(extract_file(&mut cur, readme, &dest).unwrap(), 12);
+        assert_eq!(std::fs::read(&dest).unwrap(), README);
+        let _ = std::fs::remove_dir_all(&tmp);
+        let mut sec = [0u8; SEC];
+        read_sector_at(&mut cur, 16, &mut sec).unwrap();
+        assert_eq!(&sec[1..6], b"CD001");
+    }
 }

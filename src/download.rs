@@ -1192,4 +1192,25 @@ mod tests {
         assert_eq!(percent_decode("a%20b%2Bc.iso"), "a b+c.iso");
         assert_eq!(percent_decode("plain.iso"), "plain.iso");
     }
+
+    /// stream_sha256 must produce the published FIPS 180-4 test vectors,
+    /// verified independently of this crate's implementation.
+    #[test]
+    fn stream_sha256_known_vectors() {
+        let tmp = std::env::temp_dir().join(format!("rufus-linux-test-sha-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let empty = tmp.join("empty.bin");
+        std::fs::write(&empty, b"").unwrap();
+        assert_eq!(
+            stream_sha256(&empty).unwrap(),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        let abc = tmp.join("abc.bin");
+        std::fs::write(&abc, b"abc").unwrap();
+        assert_eq!(
+            stream_sha256(&abc).unwrap(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

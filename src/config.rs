@@ -349,4 +349,36 @@ mod tests {
         let s = load();
         assert_eq!(s.label, "RUFUS");
     }
+
+    /// Full save()/load() round-trip through the real settings file, with
+    /// the XDG config dir redirected to a temp directory. No other test in
+    /// this binary reads the config dir, so the env switch is safe.
+    #[test]
+    fn save_load_roundtrip_in_temp_config_dir() {
+        let tmp = std::env::temp_dir().join(format!("rufus-linux-test-cfg-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let old = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("XDG_CONFIG_HOME", &tmp);
+        let s = Settings {
+            image_path: "/tmp/roundtrip.iso".into(),
+            label: "RT".into(),
+            persist_gb: 4,
+            ..Default::default()
+        };
+        save(&s);
+        let file = tmp.join("rufus-linux").join("settings.json");
+        assert!(
+            file.exists(),
+            "save() must write settings.json under the config dir"
+        );
+        let loaded = load();
+        assert_eq!(loaded.image_path, "/tmp/roundtrip.iso");
+        assert_eq!(loaded.label, "RT");
+        assert_eq!(loaded.persist_gb, 4);
+        match old {
+            Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
