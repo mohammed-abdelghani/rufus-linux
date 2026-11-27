@@ -33,3 +33,7 @@ ab_glyph = "0.2"
 # in the Rufus locale set); pure Rust, no C toolchain needed.
 rustybuzz = "0.20"
 unicode-bidi = "0.3"
+
+[profile.release]
+strip = true
+lto = "thin"
